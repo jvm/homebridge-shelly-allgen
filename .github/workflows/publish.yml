@@ -24,4 +24,15 @@ jobs:
       # Trusted publishing (OIDC) requires npm >= 11.5.1.
       - run: npm install -g npm@latest
       - run: npm ci
+      - name: Check npm version
+        id: npm-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "homebridge-shelly-allgen@$VERSION" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "homebridge-shelly-allgen@$VERSION is already published; skipping npm publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
       - run: npm publish
+        if: steps.npm-version.outputs.published != 'true'
