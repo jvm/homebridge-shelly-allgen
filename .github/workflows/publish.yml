@@ -7,6 +7,7 @@ name: Publish
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -21,8 +22,6 @@ jobs:
           node-version: 22.x
           cache: npm
           registry-url: https://registry.npmjs.org
-      # Trusted publishing (OIDC) requires npm >= 11.5.1.
-      - run: npm install -g npm@latest
       - run: npm ci
       - name: Check npm version
         id: npm-version
@@ -34,5 +33,7 @@ jobs:
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
-      - run: npm publish
+      # Trusted publishing (OIDC) requires npm >= 11.5.1. Run it through npx
+      # rather than `npm install -g npm@latest`, which can crash mid-self-upgrade.
+      - run: npx -y npm@latest publish
         if: steps.npm-version.outputs.published != 'true'
