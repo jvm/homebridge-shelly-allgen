@@ -57,4 +57,5 @@ Future work must preserve readiness for Homebridge verification:
 - **ESM with `.js` import specifiers**: source is `.ts` but all relative imports must end in `.js` (NodeNext resolution). `tsc` does not rewrite them.
 - `dist/` is what ships to npm — the `files` allowlist in `package.json` is explicit; `src/`, `test/`, `docs/` are excluded.
 - Hardware-affecting changes (auth, polling, realtime, command shape) need a validation entry in `docs/hardware-validation.md` before landing — see `CONTRIBUTING.md`.
-- `TODO.md` tracks deferred work; check it before proposing new features.
+- `CHANGELOG.md` is the log of what changed: record every behavioural change under the `## [Unreleased]` heading as you make it.
+- `TODO.md` is only forward-looking work, never a changelog. Add, remove, or correct entries — never mark them done or leave completed work behind. Entries are plain `-` bullets; do not use `- [ ]` checkboxes, which imply a "mark as done" workflow. When work is finished, delete its entry (the record belongs in `CHANGELOG.md`).

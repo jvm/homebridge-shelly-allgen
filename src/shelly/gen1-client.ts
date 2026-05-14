@@ -38,12 +38,22 @@ export class Gen1Client implements ShellyClient {
       this.getConfig().catch(() => ({})) as Promise<Dict>,
     ]);
     const out: ShellyComponent[] = [];
+    // Gen1 reports power/energy per channel in `status.meters[]`, indexed to
+    // match the relay/light arrays — not on the relay/light objects themselves.
+    const meters = arr(status.meters);
+    // A Shelly 2.5 in roller mode still lists its two relays in /status; they
+    // are driven by the roller, so don't surface them as standalone switches.
+    const rollerMode = str(settings.mode) === 'roller';
 
-    arr(status.relays).forEach((r, i) => {
-      out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(obj(arr(settings.relays)[i])?.name), state: { on: !!r.ison, power: num(r.power), energy: num(r.energy) } });
-    });
+    if (!rollerMode) {
+      arr(status.relays).forEach((r, i) => {
+        const meter = obj(meters[i]);
+        out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(obj(arr(settings.relays)[i])?.name), state: { on: !!r.ison, power: num(meter?.power), energy: num(meter?.total) } });
+      });
+    }
     arr(status.lights).forEach((l, i) => {
-      out.push({ key: `light:${i}`, type: 'light', id: i, name: str(obj(arr(settings.lights)[i])?.name), state: { on: !!l.ison, brightness: num(l.brightness) ?? num(l.gain), power: num(l.power), energy: num(l.energy) } });
+      const meter = obj(meters[i]);
+      out.push({ key: `light:${i}`, type: 'light', id: i, name: str(obj(arr(settings.lights)[i])?.name), state: { on: !!l.ison, brightness: num(l.brightness) ?? num(l.gain), power: num(meter?.power), energy: num(meter?.total) } });
     });
     arr(status.rollers).forEach((r, i) => {
       const pos = num(r.current_pos);

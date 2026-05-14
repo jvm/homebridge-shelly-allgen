@@ -57,3 +57,21 @@ Do not include:
 ## Hardware coverage summary
 
 Validated coverage includes a Homebridge-managed Node.js runtime with both discovery and manual configuration. Tested device classes include representative Gen1 relay, plug, metering, gas sensor, roller, and light devices, plus Gen2+ plug/switch devices. Read-only probing, accessory creation, polling, and representative Switch writes are covered. Authentication and TLS-specific paths require dedicated validation on devices configured for those modes.
+
+## Validation entries
+
+## Unreleased — Gen1 meter power, roller-mode relay suppression, null position handling
+
+- Package/commit: `unreleased` (TODO.md "Testing" follow-up)
+- Runtime: Homebridge-managed Node.js on a Linux host inside the IoT VLAN; bundled Node from the Homebridge install
+- Device coverage: Gen1 Shelly 1PM, Plug S, Shelly 1, EM3, Gas, Shelly 2.5 (roller mode); Gen2+ Plus Plug S
+- Configuration tested: read-only probe (`dist/cli/probe.js --host <ip>`) against live devices via manual host targeting
+- Authentication tested: none (open HTTP devices)
+- Realtime tested: n/a (normalization-only change; probe exercises the discovery/normalization path)
+- HomeKit services verified: Switch (Gen1 relay + Gen2 switch), WindowCovering (Gen1 roller), TemperatureSensor, gas sensor — component output inspected via probe, not paired into Home
+- Write tests: n/a (normalization-only change, no SET commands issued)
+- Result: **pass.** Before/after compared by probing with the published v0.1.0 build and the patched build against the same devices.
+  - Meter power: Shelly 1PM and Plug S surfaced no `power`/`energy` on the relay component before; after the fix both report values sourced from `status.meters[]` (e.g. Plug S relay `power: 69.84`, `energy: 26112913`). Gen1 relay objects carry no `power` field, confirming the previous code path was dead.
+  - Roller mode: Shelly 2.5 devices expose only the `roller` component (plus inputs/temperature), no phantom `relay:*` switches. Note fw v1.14.0 already reports `relays: []` in roller mode, so the `settings.mode === 'roller'` guard is defensive on this firmware; behaviour was unchanged before/after on hardware and is covered for the relays-present case by unit tests.
+  - `num()` null handling: not exercised on hardware — no Gen2+ cover is present in the test inventory, and the observed Gen1 relays omit `power` entirely rather than sending `null`. Gen2 Plus Plug S normalization (clean numeric fields) was confirmed unaffected. The uncalibrated-cover `pos: null` path remains unit-tested only.
+- Rollback notes: revert the `src/shelly/parse.ts` and `src/shelly/gen1-client.ts` changes; no config or state migration involved.

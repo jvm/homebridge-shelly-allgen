@@ -1,6 +1,9 @@
 export type Dict = Record<string, unknown>;
 
 export function num(value: unknown): number | undefined {
+  // Treat null / missing / empty string as "no value" rather than letting
+  // Number() coerce them to 0 (e.g. an uncalibrated cover reports pos: null).
+  if (value === null || value === undefined || value === '') return undefined;
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : undefined;
 }

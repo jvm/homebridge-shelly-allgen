@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Gen1 relays and lights now report power/energy from `status.meters[]` instead of the relay/light objects, which never carried those fields. Verified on Shelly 1PM and Plug S hardware, which previously surfaced no power at all.
+- Gen1 Shelly 2.5 in roller mode is guaranteed not to expose its underlying relays as standalone HomeKit switches, even on firmware that lists them in `/status` (fw v1.14.0 already reports `relays: []` in roller mode).
+- `num()` no longer coerces `null` / empty-string values to `0`, so an uncalibrated Gen2+ cover reporting `pos: null` is left position-unknown rather than appearing fully closed.
+
+### Added
+- Unit test fixtures and `discoverComponents()` normalization tests for representative Gen1 and Gen2+ status payloads.
+
 ## [0.1.0] — 2026-05-14
 
 ### Added
