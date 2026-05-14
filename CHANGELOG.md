@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-14
+
 ### Fixed
 - Gen1 relays and lights now report power/energy from `status.meters[]` instead of the relay/light objects, which never carried those fields. Verified on Shelly 1PM and Plug S hardware, which previously surfaced no power at all.
 - Gen1 Shelly 2.5 in roller mode is guaranteed not to expose its underlying relays as standalone HomeKit switches, even on firmware that lists them in `/status` (fw v1.14.0 already reports `relays: []` in roller mode).

@@ -1,7 +1,7 @@
 {
   "name": "homebridge-shelly-allgen",
   "displayName": "Homebridge Shelly AllGen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Homebridge dynamic platform plugin for Shelly Gen1 and Gen2+ devices.",
   "author": "Jose Mocito",
   "license": "Apache-2.0",
