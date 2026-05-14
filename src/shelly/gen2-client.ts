@@ -50,9 +50,12 @@ export class Gen2Client implements ShellyClient {
       const id = Number(idText);
       if (!Number.isFinite(id)) continue;
       const name = typeof config[key]?.name === 'string' ? config[key]!.name as string : undefined;
+      // `aenergy.total` is consumed energy (Wh); `ret_aenergy.total` is energy
+      // returned to the grid (Wh), present on metering-capable components.
       const aenergyTotal = num((s.aenergy as Record<string, unknown> | undefined)?.total);
-      if (type === 'switch') out.push({ key, type: 'switch', id, name, state: { on: !!s.output, power: num(s.apower), voltage: num(s.voltage), current: num(s.current), energy: aenergyTotal } });
-      if (type === 'light') out.push({ key, type: 'light', id, name, state: { on: !!s.output, brightness: num(s.brightness), power: num(s.apower), energy: aenergyTotal } });
+      const retEnergyTotal = num((s.ret_aenergy as Record<string, unknown> | undefined)?.total);
+      if (type === 'switch') out.push({ key, type: 'switch', id, name, state: { on: !!s.output, power: num(s.apower), voltage: num(s.voltage), current: num(s.current), energy: aenergyTotal, energyReturned: retEnergyTotal } });
+      if (type === 'light') out.push({ key, type: 'light', id, name, state: { on: !!s.output, brightness: num(s.brightness), power: num(s.apower), energy: aenergyTotal, energyReturned: retEnergyTotal } });
       if (type === 'cover') {
         const moving = s.state === 'opening' || s.state === 'closing' ? s.state : 'stopped';
         out.push({ key, type: 'cover', id, name, state: { currentPosition: num(s.current_pos), targetPosition: num(s.target_pos), moving } });

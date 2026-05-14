@@ -17,11 +17,9 @@ Forward-looking work only. Add, remove, or correct entries — this file is not 
 
 ## Energy metering
 
-- Add optional Eve-style custom energy characteristics via `homebridge-lib`.
 - Use `Service.Outlet` (with `OutletInUse`) instead of `Service.Switch` for relay components that represent plugs; pick the service type from the Shelly model class.
-- Parse and expose Gen1 EM/3EM multi-channel meter data.
-- Parse and expose Gen2 `aenergy`, `ret_aenergy` per-component energy counters.
-- Decide on a HomeKit energy service strategy and document it.
+- Parse and expose Gen2 `em:N` / `emdata:N` components (Gen2 EM devices) as `meter` components, mirroring the Gen1 `emeters[]` handling.
+- Add Eve history (fakegato-style) so the Eve app can chart consumption over time, not just show the live value.
 
 ## Device-specific polish
 

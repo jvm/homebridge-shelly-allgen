@@ -44,6 +44,28 @@ export const switch4 = {
   },
 };
 
+/**
+ * Shelly Pro EM-style switch that also meters energy returned to the grid:
+ * `ret_aenergy.total` normalizes to `energyReturned`. Both `aenergy.total` and
+ * `ret_aenergy.total` are watt-hours.
+ */
+export const switchWithReturn = {
+  status: {
+    'switch:0': {
+      id: 0,
+      output: true,
+      apower: -230.4,
+      voltage: 232.9,
+      current: 1.02,
+      aenergy: { total: 1381873.769 },
+      ret_aenergy: { total: 90455.12 },
+    },
+  },
+  config: {
+    'switch:0': { id: 0, name: 'Solar Feed' },
+  },
+};
+
 /** Shelly Plus Wall Dimmer: a single light component. */
 export const light = {
   status: {

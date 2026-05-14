@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-14
+
+### Added
+- Energy metering surfaced through Eve custom HomeKit characteristics (`Consumption`, `TotalConsumption`, `Voltage`, `ElectricCurrent`). Metered Gen1 relays/lights and Gen2+ switches/lights expose whichever of these their hardware reports on their existing Switch/Lightbulb service.
+- Gen1 Shelly EM/3EM `emeters[]` channels are now discovered as standalone `meter` components, each mapped to an Eve Consumption service with power, voltage, current, power factor, and consumed/returned energy. Validated on a SHEM-3 (3 channels).
+- Gen2+ `ret_aenergy.total` (energy returned to the grid) is parsed into `energyReturned` on switch/light components.
+- New `homebridge-lib` dependency, used only for its Eve custom HomeKit type definitions.
+
+### Fixed
+- Gen1 `status.meters[].total` is reported in watt-minutes; it is now converted to watt-hours so the normalized `energy` field is consistent with Gen1 `emeters` and Gen2+ `aenergy` (both already watt-hours). Previously Gen1 relay/light energy was 60× too high. Verified on a Shelly Plug S.
+
 ## [0.1.1] — 2026-05-14
 
 ### Fixed

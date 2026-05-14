@@ -92,21 +92,24 @@ export const rgbw2White = {
 };
 
 /**
- * Shelly EM: a relay plus two `emeters` channels.
- * `discoverComponents()` does not yet parse `emeters` (see TODO.md, Energy
- * metering) — this fixture exists so a regression test pins the current
- * behaviour and flags the gap when EM support lands.
+ * Shelly 3EM: a relay plus three `emeters` CT-clamp channels. `emeters[]`
+ * normalize to standalone `meter` components; `total` / `total_returned` are
+ * already watt-hours (unlike `meters[].total`, which is watt-minutes). Shapes
+ * mirror a real SHEM-3 `/status`; the third channel is left unnamed in
+ * `/settings` to prove name fallback.
  */
 export const em = {
   status: {
     relays: [{ ison: false, source: 'input' }],
     emeters: [
-      { power: 120.5, pf: 0.9, current: 0.52, voltage: 230.1, is_valid: true, total: 1000, total_returned: 5 },
-      { power: 0, pf: 0, current: 0, voltage: 230.0, is_valid: true, total: 0, total_returned: 0 },
+      { power: 140.37, pf: 0.5, current: 1.22, voltage: 231.52, is_valid: true, total: 5800520, total_returned: 240.4 },
+      { power: 55.74, pf: 0.61, current: 0.4, voltage: 231.46, is_valid: true, total: 4895670.5, total_returned: 60.7 },
+      { power: 78.46, pf: 0.69, current: 0.49, voltage: 231.49, is_valid: true, total: 7858567.1, total_returned: 34.9 },
     ],
   },
   settings: {
     relays: [{ name: 'Mains' }],
+    emeters: [{ name: 'Kitchen' }, { name: 'Water Heater' }, { name: null }],
   },
 };
 

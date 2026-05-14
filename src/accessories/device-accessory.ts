@@ -1,11 +1,17 @@
-import type { CharacteristicValue, PlatformAccessory, Service, WithUUID } from 'homebridge';
+import type { Characteristic, CharacteristicValue, PlatformAccessory, Service, WithUUID } from 'homebridge';
 import type { ShellyAllGenPlatform } from '../platform.js';
 import type { NormalizedShellyDevice, ShellyClient, ShellyComponent } from '../shelly/types.js';
 
 type SwitchComponent = Extract<ShellyComponent, { type: 'switch' }>;
 type LightComponent = Extract<ShellyComponent, { type: 'light' }>;
 type CoverComponent = Extract<ShellyComponent, { type: 'cover' }>;
+type MeterComponent = Extract<ShellyComponent, { type: 'meter' }>;
 type SensorComponent = Extract<ShellyComponent, { type: 'sensor' }>;
+
+/** The power/energy fields carried by switch, light, and meter component states. */
+type EnergyFields = { power?: number; voltage?: number; current?: number; energy?: number };
+/** An Eve custom characteristic constructor (see src/accessories/eve.ts). */
+type EnergyCharacteristic = WithUUID<{ new (): Characteristic }>;
 
 export class ShellyDeviceAccessory {
   private readonly services = new Map<string, Service>();
@@ -47,6 +53,7 @@ export class ShellyDeviceAccessory {
       if (c.type === 'switch') this.configureSwitch(c);
       else if (c.type === 'light') this.configureLight(c);
       else if (c.type === 'cover') this.configureCover(c);
+      else if (c.type === 'meter') this.configureMeter(c);
       else if (c.type === 'sensor') this.configureSensor(c);
     }
   }
@@ -76,6 +83,7 @@ export class ShellyDeviceAccessory {
         await this.client.setSwitch(c.id, v as boolean);
         this.patch(c.key, { on: v as boolean });
       });
+    this.configureEnergy(svc, c.key, c.state);
   }
 
   private configureLight(c: LightComponent) {
@@ -86,6 +94,58 @@ export class ShellyDeviceAccessory {
     svc.getCharacteristic(this.platform.Characteristic.Brightness)
       .onGet(() => this.getState(c.key, 'light')?.brightness ?? 100)
       .onSet(async v => { await this.client.setLight(c.id, { brightness: Number(v) }); this.patch(c.key, { brightness: Number(v) }); });
+    this.configureEnergy(svc, c.key, c.state);
+  }
+
+  private configureMeter(c: MeterComponent) {
+    const svc = this.getService(this.platform.eve.ConsumptionService, c.name ?? `${this.device.name ?? this.device.model} Meter ${c.id + 1}`, c.key);
+    this.configureEnergy(svc, c.key, c.state);
+  }
+
+  /**
+   * Attach Eve power/energy characteristics to a service. Only characteristics
+   * the device actually reports are added — a Gen1 plug exposes power + energy
+   * but no per-channel voltage/current, while a Gen2 plug or EM channel exposes
+   * all four.
+   */
+  private configureEnergy(svc: Service, key: string, state: EnergyFields) {
+    const eve = this.platform.eve.Characteristics;
+    if (state.power !== undefined) this.attachEnergy(svc, eve.Consumption, key, 'power');
+    if (state.energy !== undefined) this.attachEnergy(svc, eve.TotalConsumption, key, 'energy');
+    if (state.voltage !== undefined) this.attachEnergy(svc, eve.Voltage, key, 'voltage');
+    if (state.current !== undefined) this.attachEnergy(svc, eve.ElectricCurrent, key, 'current');
+  }
+
+  /**
+   * Wire one Eve characteristic onto a service. The Eve characteristics are not
+   * part of the stock Switch/Lightbulb definitions, so they must be registered
+   * as optional first or Homebridge logs a "not in required or optional
+   * characteristic section" warning. The Eve Consumption service already
+   * declares them, hence the guard against double-registration.
+   */
+  private attachEnergy(svc: Service, characteristic: EnergyCharacteristic, key: string, field: keyof EnergyFields) {
+    const known = [...svc.characteristics, ...svc.optionalCharacteristics].some(c => c.UUID === characteristic.UUID);
+    if (!known) svc.addOptionalCharacteristic(characteristic);
+    svc.getCharacteristic(characteristic).onGet(() => this.energyValue(key, field));
+  }
+
+  /** Current value for an Eve energy characteristic. `energy` is Wh in the component model; Eve's TotalConsumption is kWh. */
+  private energyValue(key: string, field: keyof EnergyFields): number {
+    const state = this.components.get(key)?.state as EnergyFields | undefined;
+    const value = state?.[field];
+    if (value === undefined) return 0;
+    return field === 'energy' ? value / 1000 : value;
+  }
+
+  /** Push fresh power/energy values to whichever Eve characteristics the component reports. */
+  private updateEnergy(svc: Service, key: string) {
+    const eve = this.platform.eve.Characteristics;
+    const state = this.components.get(key)?.state as EnergyFields | undefined;
+    if (!state) return;
+    if (state.power !== undefined) svc.updateCharacteristic(eve.Consumption, this.energyValue(key, 'power'));
+    if (state.energy !== undefined) svc.updateCharacteristic(eve.TotalConsumption, this.energyValue(key, 'energy'));
+    if (state.voltage !== undefined) svc.updateCharacteristic(eve.Voltage, this.energyValue(key, 'voltage'));
+    if (state.current !== undefined) svc.updateCharacteristic(eve.ElectricCurrent, this.energyValue(key, 'current'));
   }
 
   private configureCover(c: CoverComponent) {
@@ -145,14 +205,19 @@ export class ShellyDeviceAccessory {
     const c = this.components.get(key);
     const svc = this.services.get(key);
     if (!c || !svc) return;
-    if (c.type === 'switch') svc.updateCharacteristic(this.platform.Characteristic.On, c.state.on);
-    else if (c.type === 'light') {
+    if (c.type === 'switch') {
+      svc.updateCharacteristic(this.platform.Characteristic.On, c.state.on);
+      this.updateEnergy(svc, key);
+    } else if (c.type === 'light') {
       svc.updateCharacteristic(this.platform.Characteristic.On, c.state.on);
       if (c.state.brightness !== undefined) svc.updateCharacteristic(this.platform.Characteristic.Brightness, c.state.brightness);
+      this.updateEnergy(svc, key);
     } else if (c.type === 'cover') {
       svc.updateCharacteristic(this.platform.Characteristic.CurrentPosition, c.state.currentPosition ?? 0);
       svc.updateCharacteristic(this.platform.Characteristic.TargetPosition, c.state.targetPosition ?? c.state.currentPosition ?? 0);
       svc.updateCharacteristic(this.platform.Characteristic.PositionState, this.positionState(key));
+    } else if (c.type === 'meter') {
+      this.updateEnergy(svc, key);
     }
   }
 

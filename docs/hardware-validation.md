@@ -75,3 +75,20 @@ Validated coverage includes a Homebridge-managed Node.js runtime with both disco
   - Roller mode: Shelly 2.5 devices expose only the `roller` component (plus inputs/temperature), no phantom `relay:*` switches. Note fw v1.14.0 already reports `relays: []` in roller mode, so the `settings.mode === 'roller'` guard is defensive on this firmware; behaviour was unchanged before/after on hardware and is covered for the relays-present case by unit tests.
   - `num()` null handling: not exercised on hardware — no Gen2+ cover is present in the test inventory, and the observed Gen1 relays omit `power` entirely rather than sending `null`. Gen2 Plus Plug S normalization (clean numeric fields) was confirmed unaffected. The uncalibrated-cover `pos: null` path remains unit-tested only.
 - Rollback notes: revert the `src/shelly/parse.ts` and `src/shelly/gen1-client.ts` changes; no config or state migration involved.
+
+## Unreleased — Energy metering: Gen1 EM/3EM channels, Gen2+ returned energy, watt-minute unit fix, Eve characteristics
+
+- Package/commit: `unreleased` (TODO.md "Energy metering" follow-up)
+- Runtime: Homebridge 2.0.2, Node.js 24.15.0, Linux (Debian 13); bundled Node from the Homebridge install
+- Device coverage: Gen1 Shelly 3EM (SHEM-3), Plug S (SHPLG-S), Shelly 2.5 roller mode (SHSW-25); Gen2+ Plus Plug S (SNPL-00112EU)
+- Configuration tested: read-only probe (`dist/cli/probe.js --host <ip>`) against live devices via manual host targeting
+- Authentication tested: none (open HTTP devices)
+- Realtime tested: n/a (normalization-only change; probe exercises the discovery/normalization path)
+- HomeKit services verified: component output inspected via probe (`meter` components, switch energy fields), not paired into Home; Eve service/characteristic mapping is exercised by the build/type-check and unit tests, not yet by a live Homebridge pairing
+- Write tests: n/a (read-only change, no SET commands issued)
+- Result: **pass.**
+  - Gen1 EM/3EM: SHEM-3 surfaces three `emeter:N` `meter` components, each with `power`, `voltage`, `current`, `powerFactor`, `energy`, and `energyReturned` (e.g. `emeter:0` `power: 149.57`, `energy: 5800551`). `emeters` channel names were `null` on the device and normalize to no name, as expected.
+  - Watt-minute unit fix: SHPLG-S `relay:0` reports `energy: 435313` Wh — the raw `status.meters[0].total` of `26118781` watt-minutes ÷ 60. Before this change the field carried the unconverted watt-minute value (60× too high).
+  - Gen2+ returned energy: SNPL-00112EU `switch:0` carries `power`/`voltage`/`current`/`energy` from `aenergy.total`; no `energyReturned` is emitted because the Plus Plug S firmware does not report `ret_aenergy`. The `ret_aenergy → energyReturned` path is covered by a unit fixture; no Gen2+ EM hardware was available to validate it live.
+  - Roller mode: SHSW-25 still exposes only `roller` + inputs + temperature; its `status.meters[]` are not surfaced as standalone meters (they belong to the roller), unchanged by this work.
+- Rollback notes: revert the `src/shelly/{types,gen1-client,gen2-client}.ts`, `src/accessories/{eve,device-accessory}.ts`, `src/platform.ts`, and `src/types/homebridge-lib.d.ts` changes, and remove the `homebridge-lib` dependency from `package.json`. No config or state migration involved; cached accessories gain extra characteristics that are harmless if the plugin is downgraded.

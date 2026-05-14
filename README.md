@@ -74,11 +74,14 @@ The plugin reads the standard Shelly HTTP/JSON-RPC component model, so any Gen1 
 | Gen1 | `relays[]` | Switch |
 | Gen1 | `lights[]` (brightness / gain) | Lightbulb |
 | Gen1 | `rollers[]` | WindowCovering |
+| Gen1 | `emeters[]` (EM / 3EM channels) | Eve Consumption |
 | Gen1 | `tmp.tC`, `hum.value`, `sensor.state`, `flood`, `gas_sensor` | TemperatureSensor / HumiditySensor / ContactSensor / LeakSensor |
 | Gen2+ | `switch:N` | Switch |
 | Gen2+ | `light:N` (on/brightness) | Lightbulb |
 | Gen2+ | `cover:N` | WindowCovering |
 | Gen2+ | `temperature:N`, `humidity:N` | TemperatureSensor / HumiditySensor |
+
+Metered `relays[]` / `lights[]` / `switch:N` components additionally carry Eve power/energy characteristics on their Switch/Lightbulb service (see Feature notes).
 
 Validated device classes include representative Gen1 relay, plug, metering, gas sensor, roller, and light devices, plus Gen2+ plug/switch devices.
 
@@ -87,7 +90,7 @@ Validated device classes include representative Gen1 relay, plug, metering, gas 
 - Basic HTTP authentication is refused over cleartext HTTP; configure `protocol: "https"` or rely on Digest (the Gen2+ default).
 - Gen2+ WSS realtime accepts self-signed certificates (`rejectUnauthorized: false`) because Shelly ships self-signed certs by default. Certificate pinning is not configurable.
 - Gen1 battery-powered sensors are polled at the configured interval.
-- Per-component energy counters are read but not surfaced as Eve-style HomeKit characteristics.
+- **Energy metering.** HomeKit has no native power/energy characteristics, so the plugin uses the Eve custom characteristics (`Consumption`, `TotalConsumption`, `Voltage`, `ElectricCurrent`) read by the Eve app and other Eve-aware controllers. Metered relays/lights/switches expose whichever of those four their hardware reports directly on their existing Switch/Lightbulb service; Shelly EM/3EM `emeters` channels become standalone Eve Consumption services. Energy is normalized to watt-hours internally (Gen1 `meters` report watt-minutes and are converted) and shown as kWh in the Eve app.
 - Advanced color modes, dimmer transitions, Plus/Pro multi-profile devices, and stateless input mappings are tracked as enhancement areas.
 - `removeStaleAccessories: true` will unregister cached accessories that don't reappear during discovery — combine carefully with `discovery: true` on flaky networks.
 

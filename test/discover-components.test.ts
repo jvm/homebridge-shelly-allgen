@@ -37,16 +37,18 @@ const gen2Client = () => new Gen2Client('192.0.2.10', 1000);
 describe('Gen1Client.discoverComponents', () => {
   it('normalizes a relay with its configured name and meter power', async () => {
     mockRoutes({ '/status': gen1.relay.status, '/settings': gen1.relay.settings });
+    // meters[].total is watt-minutes (5678) and normalizes to watt-hours (95).
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'relay:0', type: 'switch', id: 0, name: 'Office Heater', state: { on: true, power: 12.34, energy: 5678 } },
+      { key: 'relay:0', type: 'switch', id: 0, name: 'Office Heater', state: { on: true, power: 12.34, energy: 95 } },
       { key: 'sensor:temperature', type: 'sensor', id: 0, sensorKind: 'temperature', state: { value: 45.2, unit: 'celsius' } },
     ]);
   });
 
   it('normalizes a dimmer light with brightness and meter power', async () => {
     mockRoutes({ '/status': gen1.light.status, '/settings': gen1.light.settings });
+    // meters[].total is watt-minutes (4242) and normalizes to watt-hours (71).
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'light:0', type: 'light', id: 0, name: 'Hallway', state: { on: true, brightness: 75, power: 8.5, energy: 4242 } },
+      { key: 'light:0', type: 'light', id: 0, name: 'Hallway', state: { on: true, brightness: 75, power: 8.5, energy: 71 } },
       { key: 'sensor:temperature', type: 'sensor', id: 0, sensorKind: 'temperature', state: { value: 50.1, unit: 'celsius' } },
     ]);
   });
@@ -75,12 +77,15 @@ describe('Gen1Client.discoverComponents', () => {
     expect(components.map(c => (c.state as { brightness?: number }).brightness)).toEqual([100, 50, 0, 25]);
   });
 
-  it('emits only the relay for an EM device (emeters are not parsed yet)', async () => {
+  it('normalizes EM/3EM emeters channels as standalone meter components', async () => {
     mockRoutes({ '/status': gen1.em.status, '/settings': gen1.em.settings });
-    // TODO.md "Parse and expose Gen1 EM/3EM multi-channel meter data" — until
-    // then `emeters` is ignored and only the relay surfaces.
+    // emeters[].total / total_returned are already watt-hours (no conversion);
+    // the third channel has no configured name and stays nameless.
     expect(await gen1Client().discoverComponents()).toEqual([
       { key: 'relay:0', type: 'switch', id: 0, name: 'Mains', state: { on: false } },
+      { key: 'emeter:0', type: 'meter', id: 0, name: 'Kitchen', state: { power: 140.37, voltage: 231.52, current: 1.22, powerFactor: 0.5, energy: 5800520, energyReturned: 240.4 } },
+      { key: 'emeter:1', type: 'meter', id: 1, name: 'Water Heater', state: { power: 55.74, voltage: 231.46, current: 0.4, powerFactor: 0.61, energy: 4895670.5, energyReturned: 60.7 } },
+      { key: 'emeter:2', type: 'meter', id: 2, state: { power: 78.46, voltage: 231.49, current: 0.49, powerFactor: 0.69, energy: 7858567.1, energyReturned: 34.9 } },
     ]);
   });
 
@@ -133,7 +138,7 @@ describe('Gen1Client.discoverComponents', () => {
     // getConfig() failures are swallowed; components surface without names.
     mockRoutes({ '/status': gen1.relay.status });
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'relay:0', type: 'switch', id: 0, state: { on: true, power: 12.34, energy: 5678 } },
+      { key: 'relay:0', type: 'switch', id: 0, state: { on: true, power: 12.34, energy: 95 } },
       { key: 'sensor:temperature', type: 'sensor', id: 0, sensorKind: 'temperature', state: { value: 45.2, unit: 'celsius' } },
     ]);
   });
@@ -161,6 +166,13 @@ describe('Gen2Client.discoverComponents', () => {
     expect(components.map(c => c.name)).toEqual(['Rack', undefined, 'Pump', undefined]);
     expect(components.map(c => (c.state as { on: boolean }).on)).toEqual([true, false, true, false]);
     expect(components.map(c => (c.state as { power?: number }).power)).toEqual([10, 0, 55.5, 0]);
+  });
+
+  it('normalizes a switch that meters returned energy', async () => {
+    mockRoutes(routes(gen2.switchWithReturn));
+    expect(await gen2Client().discoverComponents()).toEqual([
+      { key: 'switch:0', type: 'switch', id: 0, name: 'Solar Feed', state: { on: true, power: -230.4, voltage: 232.9, current: 1.02, energy: 1381873.769, energyReturned: 90455.12 } },
+    ]);
   });
 
   it('normalizes a light component with brightness and energy', async () => {

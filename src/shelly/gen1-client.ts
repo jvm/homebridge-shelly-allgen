@@ -2,6 +2,16 @@ import { fetchJson, url } from '../util/http.js';
 import { arr, num, obj, str, type Dict } from './parse.js';
 import type { CoverCommand, Credentials, LightCommand, ShellyClient, ShellyComponent, ShellyDeviceInfo } from './types.js';
 
+/**
+ * Gen1 `/status` meters report lifetime energy in watt-minutes; the normalized
+ * model uses watt-hours everywhere. `emeters` already report watt-hours and are
+ * passed through unchanged.
+ */
+function meterWh(wattMinutes: unknown): number | undefined {
+  const wm = num(wattMinutes);
+  return wm === undefined ? undefined : Math.round(wm / 60);
+}
+
 export class Gen1Client implements ShellyClient {
   constructor(
     private readonly host: string,
@@ -48,12 +58,12 @@ export class Gen1Client implements ShellyClient {
     if (!rollerMode) {
       arr(status.relays).forEach((r, i) => {
         const meter = obj(meters[i]);
-        out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(obj(arr(settings.relays)[i])?.name), state: { on: !!r.ison, power: num(meter?.power), energy: num(meter?.total) } });
+        out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(obj(arr(settings.relays)[i])?.name), state: { on: !!r.ison, power: num(meter?.power), energy: meterWh(meter?.total) } });
       });
     }
     arr(status.lights).forEach((l, i) => {
       const meter = obj(meters[i]);
-      out.push({ key: `light:${i}`, type: 'light', id: i, name: str(obj(arr(settings.lights)[i])?.name), state: { on: !!l.ison, brightness: num(l.brightness) ?? num(l.gain), power: num(meter?.power), energy: num(meter?.total) } });
+      out.push({ key: `light:${i}`, type: 'light', id: i, name: str(obj(arr(settings.lights)[i])?.name), state: { on: !!l.ison, brightness: num(l.brightness) ?? num(l.gain), power: num(meter?.power), energy: meterWh(meter?.total) } });
     });
     arr(status.rollers).forEach((r, i) => {
       const pos = num(r.current_pos);
@@ -61,6 +71,25 @@ export class Gen1Client implements ShellyClient {
     });
     arr(status.inputs).forEach((input, i) => {
       out.push({ key: `input:${i}`, type: 'input', id: i, name: str(obj(arr(settings.inputs)[i])?.name), state: { active: !!input.input, event: str(input.event), eventCount: num(input.event_cnt) } });
+    });
+    // Shelly EM / 3EM expose per-channel CT-clamp measurements in `emeters[]`.
+    // These are standalone meters (no relay/light), so they become `meter`
+    // components. `total` / `total_returned` are already watt-hours.
+    arr(status.emeters).forEach((m, i) => {
+      out.push({
+        key: `emeter:${i}`,
+        type: 'meter',
+        id: i,
+        name: str(obj(arr(settings.emeters)[i])?.name),
+        state: {
+          power: num(m.power),
+          voltage: num(m.voltage),
+          current: num(m.current),
+          powerFactor: num(m.pf),
+          energy: num(m.total),
+          energyReturned: num(m.total_returned),
+        },
+      });
     });
 
     const tmp = obj(status.tmp);

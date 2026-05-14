@@ -3,6 +3,7 @@ import { parseConfig, type ShellyAllGenConfig } from './config.js';
 import { discoverMdns, type DiscoveredEndpoint } from './discovery/mdns.js';
 import { CoIoTListener } from './discovery/coiot.js';
 import { ShellyDeviceAccessory } from './accessories/device-accessory.js';
+import { createEveTypes, type EveTypes } from './accessories/eve.js';
 import { readNormalizedDevice } from './shelly/client.js';
 import type { DeviceEndpoint, NormalizedShellyDevice, ShellyClient, ShellyComponent } from './shelly/types.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
@@ -10,6 +11,7 @@ import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
+  public readonly eve: EveTypes;
   public readonly configValues: ShellyAllGenConfig;
   private readonly accessories = new Map<string, PlatformAccessory>();
   private readonly handlers = new Map<string, ShellyDeviceAccessory>();
@@ -22,6 +24,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
   constructor(public readonly log: Logging, config: PlatformConfig, public readonly api: API) {
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
+    this.eve = createEveTypes(api);
     this.configValues = parseConfig(config);
     this.includes = this.configValues.include.map(s => s.toLowerCase());
     this.excludes = this.configValues.exclude.map(s => s.toLowerCase());
