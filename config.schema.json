@@ -1,0 +1,168 @@
+{
+  "pluginAlias": "ShellyAllGen",
+  "pluginType": "platform",
+  "singular": true,
+  "strictValidation": false,
+  "schema": {
+    "type": "object",
+    "required": ["name"],
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "title": "Bridge Name",
+        "type": "string",
+        "default": "Homebridge Shelly AllGen",
+        "description": "Display name for this platform instance in Homebridge."
+      },
+      "discovery": {
+        "title": "Enable mDNS Discovery",
+        "type": "boolean",
+        "default": true,
+        "description": "Discover Shelly devices via mDNS on the same L2 segment. Disable when devices live on a different subnet and you supply manual entries below."
+      },
+      "devices": {
+        "title": "Manual Devices",
+        "type": "array",
+        "default": [],
+        "description": "Devices to configure explicitly. Useful when mDNS does not reach them, when they require credentials, or when you want to force a generation.",
+        "items": {
+          "type": "object",
+          "required": ["host"],
+          "properties": {
+            "host": {
+              "type": "string",
+              "title": "Host or IP",
+              "description": "Hostname or IP, optionally with a port. URLs and userinfo are rejected."
+            },
+            "name": {
+              "type": "string",
+              "title": "Name",
+              "description": "Display name for the accessory. Overrides the device's own name."
+            },
+            "username": {
+              "type": "string",
+              "title": "Username",
+              "default": "admin",
+              "description": "Username for devices with authentication enabled."
+            },
+            "password": {
+              "type": "string",
+              "title": "Password",
+              "description": "Password for devices with authentication enabled."
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["http", "https"],
+              "default": "http",
+              "title": "Protocol",
+              "description": "Use https when credentials are configured. Required when the device challenges with Basic auth (Basic is refused over cleartext HTTP)."
+            },
+            "generation": {
+              "type": "string",
+              "enum": ["auto", "gen1", "gen2"],
+              "default": "auto",
+              "title": "Generation",
+              "description": "Force a generation if auto-detection picks the wrong one."
+            }
+          }
+        }
+      },
+      "pollInterval": {
+        "title": "Poll Interval (seconds)",
+        "type": "integer",
+        "default": 5,
+        "minimum": 5,
+        "description": "Background polling interval. Polling acts as a safety net even when realtime push is on."
+      },
+      "requestTimeout": {
+        "title": "Request Timeout (seconds)",
+        "type": "integer",
+        "default": 5,
+        "minimum": 1,
+        "description": "Per-request HTTP timeout. Increase on slow networks or for devices under high CPU load."
+      },
+      "realtime": {
+        "title": "Gen2 WebSocket Realtime",
+        "type": "boolean",
+        "default": true,
+        "description": "Subscribe to ws://<host>/rpc (or wss:// when protocol is https) for instant NotifyStatus updates. Polling continues as a safety net."
+      },
+      "coiot": {
+        "title": "Gen1 CoIoT Push",
+        "type": "boolean",
+        "default": true,
+        "description": "Listen for Gen1 CoIoT (CoAP) notifications on UDP 5683 and refresh devices immediately when they push. Multicast and unicast both supported. Requires Homebridge on the same L2 segment unless devices are configured to unicast directly to the Homebridge host."
+      },
+      "include": {
+        "title": "Include Filter",
+        "type": "array",
+        "default": [],
+        "items": { "type": "string" },
+        "description": "Optional substrings matched against host, MAC, device id/name, and component key. When set, only matching items are exposed."
+      },
+      "exclude": {
+        "title": "Exclude Filter",
+        "type": "array",
+        "default": [],
+        "items": { "type": "string" },
+        "description": "Optional substrings matched against host, MAC, device id/name, and component key. Matching items are hidden."
+      },
+      "splitChannels": {
+        "title": "Split Channels Into Accessories",
+        "type": "boolean",
+        "default": false,
+        "description": "Register one HomeKit accessory per channel/component instead of grouping them under a single device accessory. Useful for multi-relay devices when you want each relay to appear independently in Home."
+      },
+      "removeStaleAccessories": {
+        "title": "Remove Stale Accessories",
+        "type": "boolean",
+        "default": false,
+        "description": "Unregister cached accessories that do not reappear during discovery. Combine carefully with discovery on flaky networks — a transient mDNS miss will remove real devices."
+      },
+      "debug": {
+        "title": "Debug Logging",
+        "type": "boolean",
+        "default": false,
+        "description": "Emit verbose debug logs. Reserved for future use; errors already route through Homebridge's debug channel."
+      }
+    }
+  },
+  "layout": [
+    "name",
+    {
+      "type": "fieldset",
+      "title": "Discovery",
+      "expandable": true,
+      "expanded": true,
+      "items": ["discovery"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Devices",
+      "expandable": true,
+      "expanded": true,
+      "items": ["devices"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Polling & Realtime",
+      "expandable": true,
+      "expanded": false,
+      "items": ["pollInterval", "requestTimeout", "realtime", "coiot"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Filters",
+      "expandable": true,
+      "expanded": false,
+      "items": ["include", "exclude"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "expanded": false,
+      "items": ["splitChannels", "removeStaleAccessories", "debug"]
+    }
+  ]
+}

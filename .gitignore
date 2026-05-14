@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tgz
+semgrep-results.json
+.DS_Store
+.env
+*.log

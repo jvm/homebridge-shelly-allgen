@@ -1,0 +1,27 @@
+name: Publish
+
+# The first npm publish is done manually with `npm publish` from a local
+# checkout. Afterwards, configure trusted publishing (OIDC) for this repo and
+# workflow on npmjs.com — no NPM_TOKEN secret is needed once that is in place.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing (OIDC) requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm publish

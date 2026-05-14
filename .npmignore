@@ -1,0 +1,6 @@
+src
+test
+*.tgz
+eslint.config.js
+tsconfig.json
+semgrep-results.json
