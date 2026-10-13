@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 - Existing plug accessories and Gen1 relays with `appliance_type` `outlet` or `lights` change from a Switch service to an Outlet or Lightbulb service on upgrade. HomeKit treats this as a new service: scenes and automations that used the old Switch must be set up again. Set `"serviceType": "switch"` on the device to keep the old mapping.
+- Generated service names drop the redundant kind and number when a device has only one component of that kind: `TV Plug 1` instead of `TV Plug 1 Outlet 1`. Devices with two or more components of a kind keep the suffix (`Hall Switch 2`, `Mains Meter 3`). In `splitChannels` mode, sibling channels still count, so they keep their suffix. The Shelly Gas sensor no longer has the fixed name `Natural Gas` and follows the same rule.
 
 ### Added
 - Offline reporting. After `offlineAfterFailures` consecutive failed polls (default 3), reads fail with `SERVICE_COMMUNICATION_FAILURE` so Apple Home shows "No Response", and sensor services set `StatusFault`. The next successful poll or realtime update clears it. One info line is logged when a device goes offline and one when it recovers. `0` disables it; `devices[].offlineAfterFailures` overrides it per device (use `0` for sleeping battery sensors).
@@ -20,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Relays/switches on plugs map to `Service.Outlet`: Gen1 relays with `appliance_type` `outlet`, Gen1 plug models (`SHPLG-*`), and the Gen2 Plus Plug family (`SNPL-*`). `OutletInUse` is true when power exceeds `outletInUseWatts` (default 2 W), or follows the On state when the outlet reports no power. Eve power/energy characteristics stay on the Outlet service.
 - Gen1 relays with `appliance_type` `lights` map to an on/off `Service.Lightbulb`.
 - Per-device `serviceType` (`auto` | `switch` | `outlet` | `light`) overrides the relay/switch service auto-detection.
+- Per-device `names` map (`{ "emeter:0": "Phase A" }`) sets service display names by component key or `<type>:<id>` alias, overriding generated names and Shelly channel names.
+- Services set the `ConfiguredName` characteristic as well as `Name`, so Apple Home shows the plugin's names. A name the user sets in the Home app is kept.
 
 ### Fixed
 - Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.

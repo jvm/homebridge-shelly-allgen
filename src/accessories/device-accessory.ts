@@ -25,6 +25,8 @@ export interface AccessoryOptions {
   outletInUseWatts: number;
   /** Forces the service for this device's relay/switch components; unset means auto-detect. */
   serviceType?: SwitchServiceType;
+  /** Display names by component key (or `<type>:<id>` alias), overriding generated names. */
+  names?: Record<string, string>;
 }
 
 /** The HomeKit service and primary characteristic a sensor kind maps to. */
@@ -37,6 +39,8 @@ export class ShellyDeviceAccessory {
   private readonly services = new Map<string, Service>();
   private readonly components = new Map<string, ShellyComponent>();
   private readonly outletKeys = new Set<string>();
+  /** How many of the device's components share each service label; drives the numeric name suffix. */
+  private labelCounts = new Map<string, number>();
   private poll?: NodeJS.Timeout;
   private unsubscribe?: () => void;
   private reconnectTimer?: NodeJS.Timeout;
@@ -71,6 +75,13 @@ export class ShellyDeviceAccessory {
   }
 
   private configureServices(components: ShellyComponent[]) {
+    // Count over all of the device's (already filtered) components, not just
+    // the allowed ones, so splitChannels accessories keep their suffixes.
+    this.labelCounts = new Map();
+    for (const c of components) {
+      const label = this.serviceLabel(c);
+      if (label) this.labelCounts.set(label, (this.labelCounts.get(label) ?? 0) + 1);
+    }
     for (const c of components) {
       if (this.allowedComponentKeys && !this.allowedComponentKeys.has(c.key)) continue;
       this.components.set(c.key, c);
@@ -98,12 +109,64 @@ export class ShellyDeviceAccessory {
     }
   }
 
+  /** The word a generated service name uses for a component, or undefined when it maps to no service. */
+  private serviceLabel(c: ShellyComponent): string | undefined {
+    switch (c.type) {
+      case 'switch': {
+        const kind = switchServiceType(c, this.device.model, this.options.serviceType);
+        return kind === 'outlet' ? 'Outlet' : kind === 'light' ? 'Light' : 'Switch';
+      }
+      case 'light': return 'Light';
+      case 'cover': return 'Cover';
+      case 'meter': return 'Meter';
+      case 'sensor': return this.sensorMapping(c.sensorKind) ? c.sensorKind.charAt(0).toUpperCase() + c.sensorKind.slice(1) : undefined;
+      default: return undefined;
+    }
+  }
+
+  /**
+   * Service display name: the per-device `names` override, then the channel
+   * name configured on the Shelly, then a generated name. The generated name is
+   * the bare device name when the device has one component with this label,
+   * and `<device> <label> <n>` when it has several.
+   */
+  private serviceName(c: ShellyComponent): string {
+    const names = this.options.names;
+    const override = names?.[c.key] ?? names?.[`${c.type}:${c.id}`];
+    if (override) return override;
+    if (c.name) return c.name;
+    const base = this.device.name ?? this.device.model;
+    const label = this.serviceLabel(c) ?? c.type;
+    return (this.labelCounts.get(label) ?? 0) > 1 ? `${base} ${label} ${c.id + 1}` : base;
+  }
+
   private getService(type: WithUUID<typeof Service>, name: string, subtype: string): Service {
     const existing = this.accessory.getServiceById(type, subtype)
       ?? (this.accessory.addService as (t: WithUUID<typeof Service>, n: string, s: string) => Service)(type, name, subtype);
     existing.setCharacteristic(this.platform.Characteristic.Name, name);
+    this.setConfiguredName(existing, subtype, name);
     this.services.set(subtype, existing);
     return existing;
+  }
+
+  /**
+   * Apple Home (iOS 16+) shows a service's ConfiguredName, which no stock
+   * service declares, so it is registered as optional first. The Home app
+   * also writes ConfiguredName when a user renames a service; to keep such
+   * renames, only overwrite a value that is empty or still the name this
+   * plugin wrote last time (tracked in the accessory context).
+   */
+  private setConfiguredName(svc: Service, subtype: string, name: string) {
+    const ConfiguredName = this.platform.Characteristic.ConfiguredName;
+    const known = [...svc.characteristics, ...svc.optionalCharacteristics].some(c => c.UUID === ConfiguredName.UUID);
+    if (!known) svc.addOptionalCharacteristic(ConfiguredName);
+    const characteristic = svc.getCharacteristic(ConfiguredName);
+    const context = this.accessory.context as { configuredNames?: Record<string, string> };
+    const written = context.configuredNames ??= {};
+    const current = typeof characteristic.value === 'string' ? characteristic.value : '';
+    if (current !== '' && current !== written[subtype]) return;
+    characteristic.updateValue(name);
+    written[subtype] = name;
   }
 
   private getState(key: string, type: 'switch'): SwitchComponent['state'] | undefined;
@@ -119,8 +182,8 @@ export class ShellyDeviceAccessory {
   private configureSwitch(c: SwitchComponent) {
     const kind = switchServiceType(c, this.device.model, this.options.serviceType);
     const { Switch, Outlet, Lightbulb } = this.platform.Service;
-    const [type, label] = kind === 'outlet' ? [Outlet, 'Outlet'] : kind === 'light' ? [Lightbulb, 'Light'] : [Switch, 'Switch'];
-    const svc = this.getService(type, c.name ?? `${this.device.name ?? this.device.model} ${label} ${c.id + 1}`, c.key);
+    const type = kind === 'outlet' ? Outlet : kind === 'light' ? Lightbulb : Switch;
+    const svc = this.getService(type, this.serviceName(c), c.key);
     if (kind === 'outlet') {
       this.outletKeys.add(c.key);
       svc.getCharacteristic(this.platform.Characteristic.OutletInUse).onGet(this.online(() => this.outletInUse(c.key)));
@@ -142,7 +205,7 @@ export class ShellyDeviceAccessory {
   }
 
   private configureLight(c: LightComponent) {
-    const svc = this.getService(this.platform.Service.Lightbulb, c.name ?? `${this.device.name ?? this.device.model} Light ${c.id + 1}`, c.key);
+    const svc = this.getService(this.platform.Service.Lightbulb, this.serviceName(c), c.key);
     svc.getCharacteristic(this.platform.Characteristic.On)
       .onGet(this.online(() => this.getState(c.key, 'light')?.on ?? false))
       .onSet(async v => { await this.client.setLight(c.id, { on: v as boolean }); this.patch(c.key, { on: v as boolean }); });
@@ -153,7 +216,7 @@ export class ShellyDeviceAccessory {
   }
 
   private configureMeter(c: MeterComponent) {
-    const svc = this.getService(this.platform.eve.ConsumptionService, c.name ?? `${this.device.name ?? this.device.model} Meter ${c.id + 1}`, c.key);
+    const svc = this.getService(this.platform.eve.ConsumptionService, this.serviceName(c), c.key);
     this.configureEnergy(svc, c.key, c.state);
   }
 
@@ -204,7 +267,7 @@ export class ShellyDeviceAccessory {
   }
 
   private configureCover(c: CoverComponent) {
-    const svc = this.getService(this.platform.Service.WindowCovering, c.name ?? `${this.device.name ?? this.device.model} Cover ${c.id + 1}`, c.key);
+    const svc = this.getService(this.platform.Service.WindowCovering, this.serviceName(c), c.key);
     svc.getCharacteristic(this.platform.Characteristic.CurrentPosition)
       .onGet(this.online(() => this.getState(c.key, 'cover')?.currentPosition ?? 0));
     svc.getCharacteristic(this.platform.Characteristic.TargetPosition)
@@ -235,7 +298,7 @@ export class ShellyDeviceAccessory {
   private configureSensor(c: SensorComponent) {
     const mapping = this.sensorMapping(c.sensorKind);
     if (!mapping) return;
-    const svc = this.getService(mapping.service, c.name ?? `${this.device.name ?? this.device.model} ${c.sensorKind}`, c.key);
+    const svc = this.getService(mapping.service, this.serviceName(c), c.key);
     svc.getCharacteristic(mapping.characteristic).onGet(this.online(() => this.sensorValue(c.key, c.sensorKind)));
     this.attachStatusFault(svc, c.key);
   }

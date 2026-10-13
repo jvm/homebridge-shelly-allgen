@@ -56,7 +56,7 @@ Expanded config — mixed Gen1 and Gen2 devices, authenticated Gen2 over HTTPS, 
       "password": "REPLACE_ME",
       "name": "Plug"
     },
-    { "host": "gen1-3em.example.local", "name": "Mains", "exclude": ["switch:0"] },
+    { "host": "gen1-3em.example.local", "name": "Mains", "exclude": ["switch:0"], "names": { "emeter:0": "Phase A", "emeter:1": "Phase B", "emeter:2": "Phase C" } },
     { "host": "gen1-1pm.example.local", "serviceType": "outlet" },
     { "host": "gen1-ht.example.local", "offlineAfterFailures": 0 }
   ],
@@ -100,6 +100,7 @@ Per-device options (`devices[]` entries):
 | `protocol` | `http` | `http` or `https`. |
 | `generation` | `auto` | `auto`, `gen1`, or `gen2`. |
 | `include` / `exclude` | — | Substrings matched against this device's components only: key (`relay:0`, `emeter:1`), `<type>:<id>` alias (`switch:0` also matches a Gen1 `relay:0`), name, and type. |
+| `names` | — | Service display names by component key or `<type>:<id>` alias, e.g. `{ "emeter:0": "Phase A" }`. Overrides generated names and channel names set on the Shelly. |
 | `serviceType` | `auto` | Service for this device's relays/switches: `auto`, `switch`, `outlet`, or `light`. |
 | `offlineAfterFailures` | platform value | Per-device override. Use `0` for sleeping battery sensors. |
 
@@ -144,6 +145,7 @@ Validated device classes include representative Gen1 relay, plug, metering, gas 
 - Gen1 battery-powered sensors are polled at the configured interval. They sleep between reports, so set `offlineAfterFailures: 0` on their `devices[]` entry to stop them showing "No Response".
 - **Offline behaviour.** After `offlineAfterFailures` consecutive failed polls (default 3), the device's characteristics fail with a communication error, so Apple Home shows "No Response" instead of stale state. Sensor services also set Status Fault. The next successful poll or realtime update clears it. The log has one info line when a device goes offline and one when it recovers.
 - **Shelly Gas.** Gas is detected only when `alarm_state` is `mild` or `heavy`. Warm-up, a sensor fault, or a failed self-test sets Status Fault and does not raise an alarm.
+- **Service names.** Each service is named by, in order: the device's `names` entry for that component, the channel name set on the Shelly, then a generated name. The generated name is the device name alone when the device has one component of that kind (e.g. `TV Plug 1`), and `<device> <kind> <n>` when it has two or more (e.g. `Hall Switch 2`, `Mains Meter 3`). The plugin sets both `Name` and `ConfiguredName`, which Apple Home shows. A name you set in the Home app is kept: the plugin only updates `ConfiguredName` when it is empty or still holds the name the plugin wrote last.
 - **Stale services.** Services in the Homebridge cache that no longer match a component (after a filter change, a mode or model change, or a service type change) are removed when the accessory loads.
 - **Energy metering.** HomeKit has no native power/energy characteristics, so the plugin uses the Eve custom characteristics (`Consumption`, `TotalConsumption`, `Voltage`, `ElectricCurrent`) read by the Eve app and other Eve-aware controllers. Metered relays/lights/switches expose whichever of those four their hardware reports directly on their existing Switch/Lightbulb service; Shelly EM/3EM `emeters` channels become standalone Eve Consumption services. Energy is normalized to watt-hours internally (Gen1 `meters` report watt-minutes and are converted) and shown as kWh in the Eve app.
 - Advanced color modes, dimmer transitions, Plus/Pro multi-profile devices, and stateless input mappings are tracked as enhancement areas.

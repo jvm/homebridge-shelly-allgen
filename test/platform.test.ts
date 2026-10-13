@@ -59,4 +59,15 @@ describe('accessory registration', () => {
     expect(api.registerPlatformAccessories).not.toHaveBeenCalled();
     expect(saved).toEqual([{ call: 'update', services: [hap.Service.AccessoryInformation.UUID, hap.Service.Outlet.UUID] }]);
   });
+
+  it('names splitChannels accessories with sibling-aware suffixes and stores a single-component context', () => {
+    const { platform, register } = setup();
+    platformUnderTest = platform;
+    const relays: ShellyComponent[] = [0, 1].map(id => ({ key: `relay:${id}`, type: 'switch', id, state: { on: false } }));
+    const dev = device(relays, { name: 'Hall', model: 'SHSW-25' });
+    for (const c of relays) register(fakeClient(relays), dev, { host: '192.0.2.10' }, c);
+    const accessories = [...(platform as unknown as { accessories: Map<string, FakePlatformAccessory> }).accessories.values()];
+    expect(accessories.map(a => a.services[1].getCharacteristic(hap.Characteristic.Name).value)).toEqual(['Hall Switch 1', 'Hall Switch 2']);
+    expect(accessories.map(a => (a.context.device as { components: ShellyComponent[] }).components.map(c => c.key))).toEqual([['relay:0'], ['relay:1']]);
+  });
 });

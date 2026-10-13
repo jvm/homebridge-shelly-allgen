@@ -70,4 +70,10 @@ describe('parseConfig', () => {
     const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a', serviceType: 'outlet' }, { host: 'b', serviceType: 'auto' }, { host: 'c', serviceType: 'fan' }] } as never);
     expect(cfg.devices.map(d => d.serviceType)).toEqual(['outlet', undefined, undefined]);
   });
+
+  it('parses a per-device names map, dropping blank and non-string entries', () => {
+    const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a', names: { 'emeter:0': ' Phase A ', 'emeter:1': '', 'emeter:2': 3 } }, { host: 'b', names: ['x'] }] } as never);
+    expect(cfg.devices[0].names).toEqual({ 'emeter:0': 'Phase A' });
+    expect(cfg.devices[1].names).toEqual({});
+  });
 });

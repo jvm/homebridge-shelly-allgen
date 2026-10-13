@@ -140,7 +140,7 @@ describe('offline reporting', () => {
 });
 
 describe('gas sensor', () => {
-  const gas = (value: boolean, fault = false): ShellyComponent => ({ key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value, fault, unit: '0 ppm' } });
+  const gas = (value: boolean, fault = false): ShellyComponent => ({ key: 'sensor:gas', type: 'sensor', id: 4, sensorKind: 'gas', state: { value, fault, unit: '0 ppm' } });
 
   it.each([
     ['leak', hap.Service.LeakSensor, hap.Characteristic.LeakDetected],
@@ -235,5 +235,75 @@ describe('switch service mapping', () => {
     accessory.addService(hap.Service.Switch, 'Plug', 'relay:0');
     track(createAccessory({ accessory, components: [plugRelay(false, 0)], device: { model: 'SHPLG-S' } }));
     expect(nonInfo(accessory).map(s => s.UUID)).toEqual([hap.Service.Outlet.UUID]);
+  });
+});
+
+describe('service naming', () => {
+  const C = hap.Characteristic;
+  const names = (a: FakePlatformAccessory) => nonInfo(a).map(s => [s.subtype, s.getCharacteristic(C.Name).value, s.getCharacteristic(C.ConfiguredName).value]);
+  const meter = (id: number): ShellyComponent => ({ key: `emeter:${id}`, type: 'meter', id, state: { power: 1 } });
+  const cover: ShellyComponent = { key: 'roller:0', type: 'cover', id: 0, state: { currentPosition: 0, moving: 'stopped' } };
+
+  it('uses the bare device name for the only component of a kind', () => {
+    const { accessory } = track(createAccessory({ components: [{ key: 'relay:0', type: 'switch', id: 0, state: { on: false } }], device: { name: 'TV Plug 1', model: 'SHPLG-S' } }));
+    expect(names(accessory)).toEqual([['relay:0', 'TV Plug 1', 'TV Plug 1']]);
+  });
+
+  it('names a single cover after the device', () => {
+    const { accessory } = track(createAccessory({ components: [cover], device: { name: 'Suite Roller Shutter', model: 'SHSW-25' } }));
+    expect(names(accessory)).toEqual([['roller:0', 'Suite Roller Shutter', 'Suite Roller Shutter']]);
+  });
+
+  it('keeps the numeric suffix when a device has several components of a kind', () => {
+    const { accessory } = track(createAccessory({ components: [relay(0), relay(1)], device: { name: 'Hall', model: 'SHSW-25' } }));
+    expect(names(accessory).map(n => n[1])).toEqual(['Hall Switch 1', 'Hall Switch 2']);
+  });
+
+  it('counts kinds separately: one Switch plus one temperature sensor are both unsuffixed', () => {
+    const { accessory } = track(createAccessory({ components: [relay(0), temperature], device: { name: 'Boiler' } }));
+    expect(names(accessory).map(n => n[1])).toEqual(['Boiler', 'Boiler']);
+  });
+
+  it('applies the per-device names map by key or <type>:<id> alias, ahead of the Shelly channel name', () => {
+    const { accessory } = track(createAccessory({
+      components: [meter(0), meter(1), meter(2), { key: 'relay:0', type: 'switch', id: 0, name: 'Shelly name', state: { on: false } }],
+      device: { name: 'Mains', model: 'SHEM-3' },
+      options: { names: { 'emeter:0': 'Phase A', 'switch:0': 'Contactor' } },
+    }));
+    expect(names(accessory).map(n => n[1])).toEqual(['Phase A', 'Mains Meter 2', 'Mains Meter 3', 'Contactor']);
+  });
+
+  it('keeps the channel name configured on the Shelly when no override is set', () => {
+    const { accessory } = track(createAccessory({ components: [{ key: 'relay:0', type: 'switch', id: 0, name: 'Office Heater', state: { on: false } }], device: { name: 'Office' } }));
+    expect(names(accessory)[0][1]).toBe('Office Heater');
+  });
+
+  it('keeps the suffix in splitChannels mode when siblings share the kind', () => {
+    const { accessory } = track(createAccessory({ components: [relay(0), relay(1)], device: { name: 'Hall' }, allowedComponentKeys: new Set(['relay:1']) }));
+    expect(names(accessory)).toEqual([['relay:1', 'Hall Switch 2', 'Hall Switch 2']]);
+  });
+
+  it('replaces a ConfiguredName the plugin wrote earlier', () => {
+    const accessory = new FakePlatformAccessory('Plug');
+    track(createAccessory({ accessory, components: [relay(0)], device: { name: 'Old Name' } })).handler.close();
+    track(createAccessory({ accessory, components: [relay(0)], device: { name: 'New Name' } }));
+    expect(names(accessory)).toEqual([['relay:0', 'New Name', 'New Name']]);
+  });
+
+  it('keeps a ConfiguredName the user set in the Home app', () => {
+    const accessory = new FakePlatformAccessory('Plug');
+    track(createAccessory({ accessory, components: [relay(0)], device: { name: 'Generated' } })).handler.close();
+    accessory.getServiceById(hap.Service.Switch, 'relay:0')!.getCharacteristic(C.ConfiguredName).setValue('Lamp by sofa');
+    track(createAccessory({ accessory, components: [relay(0)], device: { name: 'Generated Again' } }));
+    expect(names(accessory)).toEqual([['relay:0', 'Generated Again', 'Lamp by sofa']]);
+  });
+
+  it('keeps a pre-existing user ConfiguredName on a cached service from an older version', () => {
+    const accessory = new FakePlatformAccessory('Plug');
+    const cached = accessory.addService(hap.Service.Switch, 'Plug Switch 1', 'relay:0');
+    cached.addOptionalCharacteristic(C.ConfiguredName);
+    cached.getCharacteristic(C.ConfiguredName).setValue('My Lamp');
+    track(createAccessory({ accessory, components: [relay(0)], device: { name: 'Plug' } }));
+    expect(names(accessory)).toEqual([['relay:0', 'Plug', 'My Lamp']]);
   });
 });

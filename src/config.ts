@@ -12,6 +12,8 @@ export interface DeviceConfig extends DeviceEndpoint {
   serviceType?: SwitchServiceType | 'auto';
   /** Overrides the platform-wide `offlineAfterFailures` for this device; 0 disables offline reporting. */
   offlineAfterFailures?: number;
+  /** Service display names by component key (e.g. `emeter:0`) or `<type>:<id>` alias, overriding generated names. */
+  names?: Record<string, string>;
   /** Substrings matched against this device's component key/name/type; when set, only matching components are exposed. */
   include?: string[];
   /** Substrings matched against this device's component key/name/type; matching components are hidden. */
@@ -58,6 +60,16 @@ function oneOf<T extends string>(raw: unknown, allowed: readonly T[]): T | undef
   return allowed.find(v => v === raw);
 }
 
+/** Keep only non-blank string names; anything else in the map is dropped. */
+function nameMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string' && value.trim()) out[key.trim()] = value.trim();
+  }
+  return out;
+}
+
 function parseDevice(raw: DeviceConfig): DeviceConfig {
   const device: DeviceConfig = { ...raw };
   if (raw.include !== undefined) device.include = stringList(raw.include);
@@ -67,6 +79,7 @@ function parseDevice(raw: DeviceConfig): DeviceConfig {
     if (serviceType) device.serviceType = serviceType;
     else delete device.serviceType;
   }
+  if (raw.names !== undefined) device.names = nameMap(raw.names);
   if (raw.offlineAfterFailures !== undefined) device.offlineAfterFailures = positiveInt(raw.offlineAfterFailures, 3, 0);
   return device;
 }

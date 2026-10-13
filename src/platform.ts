@@ -114,7 +114,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
         // Inputs don't currently map to a HomeKit service, so a per-input
         // accessory would be empty. Skip until inputs gain a service mapping.
         if (component.type === 'input') continue;
-        this.registerDeviceAccessory(client, { ...device, components: [component] }, endpoint, component);
+        this.registerDeviceAccessory(client, device, endpoint, component);
       }
       return;
     }
@@ -127,6 +127,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
       gasSensorType: this.configValues.gasSensorType,
       outletInUseWatts: this.configValues.outletInUseWatts,
       serviceType: endpoint.serviceType === 'auto' ? undefined : endpoint.serviceType,
+      names: endpoint.names,
     };
   }
 
@@ -145,7 +146,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
       accessory = new this.api.platformAccessory(displayName, uuid);
       this.accessories.set(uuid, accessory);
     }
-    accessory.context.device = device;
+    accessory.context.device = component ? { ...device, components: [component] } : device;
     this.handlers.get(uuid)?.close();
     this.handlers.set(uuid, new ShellyDeviceAccessory(this, accessory, client, device, this.accessoryOptions(endpoint), component ? new Set([component.key]) : undefined));
     // Register or persist only after the handler has configured (and, for a

@@ -92,14 +92,14 @@ describe('Gen1Client.discoverComponents', () => {
   it('reports a gas sensor as not-alarmed when idle', async () => {
     mockRoutes({ '/status': gen1.gasIdle.status, '/settings': gen1.gasIdle.settings });
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: false, fault: false, unit: '0 ppm' } },
+      { key: 'sensor:gas', type: 'sensor', id: 4, sensorKind: 'gas', state: { value: false, fault: false, unit: '0 ppm' } },
     ]);
   });
 
   it('reports a gas sensor as alarmed with a concentration reading', async () => {
     mockRoutes({ '/status': gen1.gasAlarm.status, '/settings': gen1.gasAlarm.settings });
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: true, fault: false, unit: '180 ppm' } },
+      { key: 'sensor:gas', type: 'sensor', id: 4, sensorKind: 'gas', state: { value: true, fault: false, unit: '180 ppm' } },
     ]);
   });
 

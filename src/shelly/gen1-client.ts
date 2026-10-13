@@ -123,7 +123,7 @@ export class Gen1Client implements ShellyClient {
     if (gas) {
       const concentration = obj(status.concentration);
       const ppm = num(concentration?.ppm);
-      out.push({ key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: gasState(gas, ppm) });
+      out.push({ key: 'sensor:gas', type: 'sensor', id: 4, sensorKind: 'gas', state: gasState(gas, ppm) });
     }
     return out;
   }

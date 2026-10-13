@@ -64,6 +64,12 @@
               "title": "Generation",
               "description": "Force a generation if auto-detection picks the wrong one."
             },
+            "names": {
+              "type": "object",
+              "title": "Service Names",
+              "additionalProperties": { "type": "string" },
+              "description": "Optional display names by component key or <type>:<id> alias, overriding generated names. Example: {\"emeter:0\": \"Phase A\", \"emeter:1\": \"Phase B\"}."
+            },
             "serviceType": {
               "type": "string",
               "enum": ["auto", "switch", "outlet", "light"],
