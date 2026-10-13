@@ -176,3 +176,64 @@ describe('gas sensor', () => {
     expect(svc.getCharacteristic(hap.Characteristic.StatusFault).value).toBe(hap.Characteristic.StatusFault.NO_FAULT);
   });
 });
+
+describe('switch service mapping', () => {
+  const plugRelay = (on: boolean, power?: number): ShellyComponent => ({ key: 'relay:0', type: 'switch', id: 0, applianceType: 'general', state: { on, power, energy: power === undefined ? undefined : 1000 } });
+
+  it('exposes a plug relay as an Outlet with Eve power characteristics', async () => {
+    const { accessory, platform } = track(createAccessory({ components: [plugRelay(true, 40)], device: { model: 'SHPLG-S' } }));
+    const svc = accessory.getServiceById(hap.Service.Outlet, 'relay:0')!;
+    expect(svc).toBeDefined();
+    expect(accessory.getServiceById(hap.Service.Switch, 'relay:0')).toBeUndefined();
+    await expect(svc.getCharacteristic(hap.Characteristic.OutletInUse).handleGetRequest()).resolves.toBe(true);
+    expect(svc.testCharacteristic(platform.eve.Characteristics.Consumption)).toBe(true);
+    expect(svc.testCharacteristic(platform.eve.Characteristics.TotalConsumption)).toBe(true);
+  });
+
+  it('sets OutletInUse from power above outletInUseWatts', async () => {
+    const { accessory } = track(createAccessory({ components: [plugRelay(true, 1.5)], device: { model: 'SNPL-00112EU' } }));
+    const inUse = accessory.getServiceById(hap.Service.Outlet, 'relay:0')!.getCharacteristic(hap.Characteristic.OutletInUse);
+    await expect(inUse.handleGetRequest()).resolves.toBe(false);
+  });
+
+  it('honours a custom outletInUseWatts threshold', async () => {
+    const { accessory } = track(createAccessory({ components: [plugRelay(true, 1.5)], device: { model: 'SHPLG-S' }, options: { outletInUseWatts: 1 } }));
+    const inUse = accessory.getServiceById(hap.Service.Outlet, 'relay:0')!.getCharacteristic(hap.Characteristic.OutletInUse);
+    await expect(inUse.handleGetRequest()).resolves.toBe(true);
+  });
+
+  it('falls back to the On state for OutletInUse without a power reading', async () => {
+    const { accessory } = track(createAccessory({ components: [{ key: 'relay:0', type: 'switch', id: 0, applianceType: 'outlet', state: { on: true } }] }));
+    const inUse = accessory.getServiceById(hap.Service.Outlet, 'relay:0')!.getCharacteristic(hap.Characteristic.OutletInUse);
+    await expect(inUse.handleGetRequest()).resolves.toBe(true);
+  });
+
+  it('pushes OutletInUse changes from polling', async () => {
+    const { accessory, client } = track(createAccessory({ components: [plugRelay(true, 0)], device: { model: 'SHPLG-S' } }));
+    const inUse = accessory.getServiceById(hap.Service.Outlet, 'relay:0')!.getCharacteristic(hap.Characteristic.OutletInUse);
+    client.discoverComponents.mockResolvedValue([plugRelay(true, 60)]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inUse.value).toBe(true);
+  });
+
+  it('exposes appliance_type lights as an on/off Lightbulb that drives the relay', async () => {
+    const { accessory, client } = track(createAccessory({ components: [{ key: 'relay:0', type: 'switch', id: 0, applianceType: 'lights', state: { on: false } }] }));
+    const svc = accessory.getServiceById(hap.Service.Lightbulb, 'relay:0')!;
+    expect(svc).toBeDefined();
+    expect(svc.testCharacteristic(hap.Characteristic.Brightness)).toBe(false);
+    await svc.getCharacteristic(hap.Characteristic.On).handleSetRequest(true);
+    expect(client.setSwitch).toHaveBeenCalledWith(0, true);
+  });
+
+  it('lets serviceType override auto-detection', () => {
+    const { accessory } = track(createAccessory({ components: [plugRelay(false, 0)], device: { model: 'SHPLG-S' }, options: { serviceType: 'switch' } }));
+    expect(nonInfo(accessory).map(s => s.UUID)).toEqual([hap.Service.Switch.UUID]);
+  });
+
+  it('migrates a cached Switch to an Outlet on the same subtype', () => {
+    const accessory = new FakePlatformAccessory('Plug');
+    accessory.addService(hap.Service.Switch, 'Plug', 'relay:0');
+    track(createAccessory({ accessory, components: [plugRelay(false, 0)], device: { model: 'SHPLG-S' } }));
+    expect(nonInfo(accessory).map(s => s.UUID)).toEqual([hap.Service.Outlet.UUID]);
+  });
+});

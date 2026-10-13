@@ -39,7 +39,7 @@ describe('Gen1Client.discoverComponents', () => {
     mockRoutes({ '/status': gen1.relay.status, '/settings': gen1.relay.settings });
     // meters[].total is watt-minutes (5678) and normalizes to watt-hours (95).
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'relay:0', type: 'switch', id: 0, name: 'Office Heater', state: { on: true, power: 12.34, energy: 95 } },
+      { key: 'relay:0', type: 'switch', id: 0, name: 'Office Heater', applianceType: 'general', state: { on: true, power: 12.34, energy: 95 } },
       { key: 'sensor:temperature', type: 'sensor', id: 0, sensorKind: 'temperature', state: { value: 45.2, unit: 'celsius' } },
     ]);
   });

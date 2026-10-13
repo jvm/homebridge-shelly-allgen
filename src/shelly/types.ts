@@ -34,7 +34,8 @@ export interface SensorState { value: boolean | number | string | null; unit?: s
 export interface MeterState { power?: number; voltage?: number; current?: number; powerFactor?: number; energy?: number; energyReturned?: number }
 
 export type ShellyComponent =
-  | { key: string; type: 'switch'; id: number; name?: string; state: SwitchState }
+  /** `applianceType` is the Gen1 relay `appliance_type` setting (e.g. `outlet`, `lights`); Gen2+ has no equivalent. */
+  | { key: string; type: 'switch'; id: number; name?: string; applianceType?: string; state: SwitchState }
   | { key: string; type: 'light'; id: number; name?: string; state: LightState }
   | { key: string; type: 'cover'; id: number; name?: string; state: CoverState }
   | { key: string; type: 'input'; id: number; name?: string; state: InputState }

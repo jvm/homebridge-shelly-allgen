@@ -77,7 +77,8 @@ export class Gen1Client implements ShellyClient {
     if (!rollerMode) {
       arr(status.relays).forEach((r, i) => {
         const meter = obj(meters[i]);
-        out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(obj(arr(settings.relays)[i])?.name), state: { on: !!r.ison, power: num(meter?.power), energy: meterWh(meter?.total) } });
+        const relaySettings = obj(arr(settings.relays)[i]);
+        out.push({ key: `relay:${i}`, type: 'switch', id: i, name: str(relaySettings?.name), applianceType: str(relaySettings?.appliance_type), state: { on: !!r.ison, power: num(meter?.power), energy: meterWh(meter?.total) } });
       });
     }
     arr(status.lights).forEach((l, i) => {

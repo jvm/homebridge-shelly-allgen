@@ -6,12 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- Existing plug accessories and Gen1 relays with `appliance_type` `outlet` or `lights` change from a Switch service to an Outlet or Lightbulb service on upgrade. HomeKit treats this as a new service: scenes and automations that used the old Switch must be set up again. Set `"serviceType": "switch"` on the device to keep the old mapping.
+
 ### Added
 - Offline reporting. After `offlineAfterFailures` consecutive failed polls (default 3), reads fail with `SERVICE_COMMUNICATION_FAILURE` so Apple Home shows "No Response", and sensor services set `StatusFault`. The next successful poll or realtime update clears it. One info line is logged when a device goes offline and one when it recovers. `0` disables it; `devices[].offlineAfterFailures` overrides it per device (use `0` for sleeping battery sensors).
 - Per-device `include` / `exclude` filters on `devices[]` entries. They match only that device's components: key (`relay:0`, `emeter:1`), the generation-neutral `<type>:<id>` alias (`switch:0` also selects a Gen1 `relay:0`), name, and type. Blank terms are ignored. Platform-wide `include` / `exclude` are unchanged. Example: a Shelly 3EM with `"exclude": ["switch:0"]` hides its contactor relay.
 - Unit tests for platform-wide and per-device include/exclude filter logic.
 - `gasSensorType` (`leak` | `smoke` | `co`, default `leak`) selects the HomeKit service for Shelly Gas sensors: LeakSensor, SmokeSensor, or CarbonMonoxideSensor.
 - Sensor services now push value and `StatusFault` changes found by polling or realtime updates, so HomeKit notifications (e.g. a gas alarm) no longer wait for the controller to read the value.
+- Relays/switches on plugs map to `Service.Outlet`: Gen1 relays with `appliance_type` `outlet`, Gen1 plug models (`SHPLG-*`), and the Gen2 Plus Plug family (`SNPL-*`). `OutletInUse` is true when power exceeds `outletInUseWatts` (default 2 W), or follows the On state when the outlet reports no power. Eve power/energy characteristics stay on the Outlet service.
+- Gen1 relays with `appliance_type` `lights` map to an on/off `Service.Lightbulb`.
+- Per-device `serviceType` (`auto` | `switch` | `outlet` | `light`) overrides the relay/switch service auto-detection.
 
 ### Fixed
 - Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.

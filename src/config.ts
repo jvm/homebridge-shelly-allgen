@@ -4,7 +4,12 @@ import type { DeviceEndpoint } from './shelly/types.js';
 export const GAS_SENSOR_TYPES = ['leak', 'smoke', 'co'] as const;
 export type GasSensorType = typeof GAS_SENSOR_TYPES[number];
 
+export const SWITCH_SERVICE_TYPES = ['switch', 'outlet', 'light'] as const;
+export type SwitchServiceType = typeof SWITCH_SERVICE_TYPES[number];
+
 export interface DeviceConfig extends DeviceEndpoint {
+  /** HomeKit service for this device's relay/switch components; `auto` or unset auto-detects. */
+  serviceType?: SwitchServiceType | 'auto';
   /** Overrides the platform-wide `offlineAfterFailures` for this device; 0 disables offline reporting. */
   offlineAfterFailures?: number;
   /** Substrings matched against this device's component key/name/type; when set, only matching components are exposed. */
@@ -33,6 +38,8 @@ export interface ShellyAllGenConfig {
   offlineAfterFailures: number;
   /** HomeKit service for Shelly Gas sensors: LeakSensor, SmokeSensor, or CarbonMonoxideSensor. */
   gasSensorType: GasSensorType;
+  /** Watts above which an Outlet reports OutletInUse. */
+  outletInUseWatts: number;
   debug: boolean;
 }
 
@@ -40,6 +47,11 @@ function positiveInt(raw: unknown, fallback: number, min: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.floor(n));
+}
+
+function nonNegative(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  return raw !== null && raw !== '' && Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 function oneOf<T extends string>(raw: unknown, allowed: readonly T[]): T | undefined {
@@ -50,6 +62,11 @@ function parseDevice(raw: DeviceConfig): DeviceConfig {
   const device: DeviceConfig = { ...raw };
   if (raw.include !== undefined) device.include = stringList(raw.include);
   if (raw.exclude !== undefined) device.exclude = stringList(raw.exclude);
+  if (raw.serviceType !== undefined) {
+    const serviceType = oneOf(raw.serviceType, SWITCH_SERVICE_TYPES);
+    if (serviceType) device.serviceType = serviceType;
+    else delete device.serviceType;
+  }
   if (raw.offlineAfterFailures !== undefined) device.offlineAfterFailures = positiveInt(raw.offlineAfterFailures, 3, 0);
   return device;
 }
@@ -69,6 +86,7 @@ export function parseConfig(config: PlatformConfig): ShellyAllGenConfig {
     exclude: stringList(config.exclude),
     offlineAfterFailures: positiveInt(config.offlineAfterFailures, 3, 0),
     gasSensorType: oneOf(config.gasSensorType, GAS_SENSOR_TYPES) ?? 'leak',
+    outletInUseWatts: nonNegative(config.outletInUseWatts, 2),
     debug: config.debug === true,
   };
 }

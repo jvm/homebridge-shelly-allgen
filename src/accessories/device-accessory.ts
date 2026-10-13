@@ -1,7 +1,8 @@
 import type { Characteristic, CharacteristicValue, PlatformAccessory, Service, WithUUID } from 'homebridge';
-import type { GasSensorType } from '../config.js';
+import type { GasSensorType, SwitchServiceType } from '../config.js';
 import type { ShellyAllGenPlatform } from '../platform.js';
 import type { NormalizedShellyDevice, ShellyClient, ShellyComponent } from '../shelly/types.js';
+import { switchServiceType } from './service-kind.js';
 
 type SwitchComponent = Extract<ShellyComponent, { type: 'switch' }>;
 type LightComponent = Extract<ShellyComponent, { type: 'light' }>;
@@ -20,6 +21,10 @@ export interface AccessoryOptions {
   offlineAfterFailures: number;
   /** HomeKit service for a Shelly Gas sensor. */
   gasSensorType: GasSensorType;
+  /** An Outlet is "in use" when its power reading exceeds this many watts. */
+  outletInUseWatts: number;
+  /** Forces the service for this device's relay/switch components; unset means auto-detect. */
+  serviceType?: SwitchServiceType;
 }
 
 /** The HomeKit service and primary characteristic a sensor kind maps to. */
@@ -31,6 +36,7 @@ interface SensorMapping {
 export class ShellyDeviceAccessory {
   private readonly services = new Map<string, Service>();
   private readonly components = new Map<string, ShellyComponent>();
+  private readonly outletKeys = new Set<string>();
   private poll?: NodeJS.Timeout;
   private unsubscribe?: () => void;
   private reconnectTimer?: NodeJS.Timeout;
@@ -109,8 +115,16 @@ export class ShellyDeviceAccessory {
     return c && c.type === type ? c.state : undefined;
   }
 
+  /** Relays/switches map to Switch, Outlet, or on/off Lightbulb — see switchServiceType(). */
   private configureSwitch(c: SwitchComponent) {
-    const svc = this.getService(this.platform.Service.Switch, c.name ?? `${this.device.name ?? this.device.model} Switch ${c.id + 1}`, c.key);
+    const kind = switchServiceType(c, this.device.model, this.options.serviceType);
+    const { Switch, Outlet, Lightbulb } = this.platform.Service;
+    const [type, label] = kind === 'outlet' ? [Outlet, 'Outlet'] : kind === 'light' ? [Lightbulb, 'Light'] : [Switch, 'Switch'];
+    const svc = this.getService(type, c.name ?? `${this.device.name ?? this.device.model} ${label} ${c.id + 1}`, c.key);
+    if (kind === 'outlet') {
+      this.outletKeys.add(c.key);
+      svc.getCharacteristic(this.platform.Characteristic.OutletInUse).onGet(this.online(() => this.outletInUse(c.key)));
+    }
     svc.getCharacteristic(this.platform.Characteristic.On)
       .onGet(this.online(() => this.getState(c.key, 'switch')?.on ?? false))
       .onSet(async v => {
@@ -118,6 +132,13 @@ export class ShellyDeviceAccessory {
         this.patch(c.key, { on: v as boolean });
       });
     this.configureEnergy(svc, c.key, c.state);
+  }
+
+  /** In use when drawing more than `outletInUseWatts`; without a power reading, fall back to the On state. */
+  private outletInUse(key: string): boolean {
+    const state = this.getState(key, 'switch');
+    if (!state) return false;
+    return state.power !== undefined ? state.power > this.options.outletInUseWatts : state.on;
   }
 
   private configureLight(c: LightComponent) {
@@ -304,6 +325,7 @@ export class ShellyDeviceAccessory {
     if (!c || !svc) return;
     if (c.type === 'switch') {
       svc.updateCharacteristic(this.platform.Characteristic.On, c.state.on);
+      if (this.outletKeys.has(key)) svc.updateCharacteristic(this.platform.Characteristic.OutletInUse, this.outletInUse(key));
       this.updateEnergy(svc, key);
     } else if (c.type === 'light') {
       svc.updateCharacteristic(this.platform.Characteristic.On, c.state.on);

@@ -59,4 +59,15 @@ describe('parseConfig', () => {
     expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', gasSensorType: 'smoke' } as never).gasSensorType).toBe('smoke');
     expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', gasSensorType: 'methane' } as never).gasSensorType).toBe('leak');
   });
+
+  it('defaults outletInUseWatts to 2 and rejects negative values', () => {
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X' } as never).outletInUseWatts).toBe(2);
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', outletInUseWatts: 0.5 } as never).outletInUseWatts).toBe(0.5);
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', outletInUseWatts: -1 } as never).outletInUseWatts).toBe(2);
+  });
+
+  it('parses per-device serviceType, dropping auto and unknown values', () => {
+    const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a', serviceType: 'outlet' }, { host: 'b', serviceType: 'auto' }, { host: 'c', serviceType: 'fan' }] } as never);
+    expect(cfg.devices.map(d => d.serviceType)).toEqual(['outlet', undefined, undefined]);
+  });
 });

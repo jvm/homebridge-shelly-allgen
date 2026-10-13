@@ -125,6 +125,8 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     return {
       offlineAfterFailures: endpoint.offlineAfterFailures ?? this.configValues.offlineAfterFailures,
       gasSensorType: this.configValues.gasSensorType,
+      outletInUseWatts: this.configValues.outletInUseWatts,
+      serviceType: endpoint.serviceType === 'auto' ? undefined : endpoint.serviceType,
     };
   }
 

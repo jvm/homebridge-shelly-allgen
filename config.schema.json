@@ -64,6 +64,13 @@
               "title": "Generation",
               "description": "Force a generation if auto-detection picks the wrong one."
             },
+            "serviceType": {
+              "type": "string",
+              "enum": ["auto", "switch", "outlet", "light"],
+              "default": "auto",
+              "title": "Relay Service Type",
+              "description": "HomeKit service for this device's relays/switches. auto: Outlet for plugs (SHPLG-*, SNPL-*) and Gen1 relays with appliance type outlet, on/off Lightbulb for Gen1 appliance type lights, Switch otherwise."
+            },
             "offlineAfterFailures": {
               "type": "integer",
               "minimum": 0,
@@ -124,6 +131,13 @@
         "enum": ["leak", "smoke", "co"],
         "default": "leak",
         "description": "HomeKit service for Shelly Gas sensors: leak (LeakSensor, default), smoke (SmokeSensor), or co (CarbonMonoxideSensor). Changing it replaces the service, so automations that use it must be recreated."
+      },
+      "outletInUseWatts": {
+        "title": "Outlet In Use Threshold (W)",
+        "type": "number",
+        "default": 2,
+        "minimum": 0,
+        "description": "An Outlet reports Outlet In Use when it draws more than this many watts. Outlets without a power reading use their On state."
       },
       "include": {
         "title": "Include Filter",
@@ -194,7 +208,7 @@
       "title": "Advanced",
       "expandable": true,
       "expanded": false,
-      "items": ["gasSensorType", "splitChannels", "removeStaleAccessories", "debug"]
+      "items": ["outletInUseWatts", "gasSensorType", "splitChannels", "removeStaleAccessories", "debug"]
     }
   ]
 }
