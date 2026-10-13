@@ -4,6 +4,14 @@ import type { DeviceEndpoint } from './shelly/types.js';
 export interface DeviceConfig extends DeviceEndpoint {
   /** Overrides the platform-wide `offlineAfterFailures` for this device; 0 disables offline reporting. */
   offlineAfterFailures?: number;
+  /** Substrings matched against this device's component key/name/type; when set, only matching components are exposed. */
+  include?: string[];
+  /** Substrings matched against this device's component key/name/type; matching components are hidden. */
+  exclude?: string[];
+}
+
+function stringList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.map(String) : [];
 }
 
 export interface ShellyAllGenConfig {
@@ -31,6 +39,8 @@ function positiveInt(raw: unknown, fallback: number, min: number): number {
 
 function parseDevice(raw: DeviceConfig): DeviceConfig {
   const device: DeviceConfig = { ...raw };
+  if (raw.include !== undefined) device.include = stringList(raw.include);
+  if (raw.exclude !== undefined) device.exclude = stringList(raw.exclude);
   if (raw.offlineAfterFailures !== undefined) device.offlineAfterFailures = positiveInt(raw.offlineAfterFailures, 3, 0);
   return device;
 }
@@ -46,8 +56,8 @@ export function parseConfig(config: PlatformConfig): ShellyAllGenConfig {
     coiot: config.coiot !== false,
     splitChannels: config.splitChannels === true,
     removeStaleAccessories: config.removeStaleAccessories === true,
-    include: Array.isArray(config.include) ? config.include.map(String) : [],
-    exclude: Array.isArray(config.exclude) ? config.exclude.map(String) : [],
+    include: stringList(config.include),
+    exclude: stringList(config.exclude),
     offlineAfterFailures: positiveInt(config.offlineAfterFailures, 3, 0),
     debug: config.debug === true,
   };

@@ -46,4 +46,10 @@ describe('parseConfig', () => {
     expect(cfg.devices[0].offlineAfterFailures).toBe(0);
     expect(cfg.devices[1]).not.toHaveProperty('offlineAfterFailures');
   });
+
+  it('parses per-device include/exclude as string lists', () => {
+    const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a', exclude: ['switch:0', 1] }, { host: 'b', include: 'nope' }] } as never);
+    expect(cfg.devices[0].exclude).toEqual(['switch:0', '1']);
+    expect(cfg.devices[1].include).toEqual([]);
+  });
 });

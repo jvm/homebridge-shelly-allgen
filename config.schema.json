@@ -69,6 +69,18 @@
               "minimum": 0,
               "title": "Offline After Failed Polls",
               "description": "Overrides the platform-wide setting for this device. Set 0 for battery-powered sensors that sleep between reports."
+            },
+            "include": {
+              "type": "array",
+              "title": "Include Components",
+              "items": { "type": "string" },
+              "description": "Optional substrings matched against this device's component key (e.g. relay:0, emeter:1), <type>:<id> alias (e.g. switch:0), name, and type. When set, only matching components are exposed."
+            },
+            "exclude": {
+              "type": "array",
+              "title": "Exclude Components",
+              "items": { "type": "string" },
+              "description": "Optional substrings matched against this device's component key, <type>:<id> alias, name, and type. Matching components are hidden. Example for a Shelly 3EM: [\"switch:0\"]."
             }
           }
         }

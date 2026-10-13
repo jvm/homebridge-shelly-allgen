@@ -4,6 +4,7 @@ import { discoverMdns, type DiscoveredEndpoint } from './discovery/mdns.js';
 import { CoIoTListener } from './discovery/coiot.js';
 import { ShellyDeviceAccessory, type AccessoryOptions } from './accessories/device-accessory.js';
 import { createEveTypes, type EveTypes } from './accessories/eve.js';
+import { matchesDeviceFilters, matchesGlobalFilters, type FilterTerms } from './filters.js';
 import { readNormalizedDevice } from './shelly/client.js';
 import type { NormalizedShellyDevice, ShellyClient, ShellyComponent } from './shelly/types.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
@@ -17,8 +18,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
   private readonly handlers = new Map<string, ShellyDeviceAccessory>();
   private readonly discovered = new Set<string>();
   private readonly discoveryAbort = new AbortController();
-  private readonly includes: string[];
-  private readonly excludes: string[];
+  private readonly filters: FilterTerms;
   public readonly coiot?: CoIoTListener;
 
   constructor(public readonly log: Logging, config: PlatformConfig, public readonly api: API) {
@@ -26,8 +26,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
     this.eve = createEveTypes(api);
     this.configValues = parseConfig(config);
-    this.includes = this.configValues.include.map(s => s.toLowerCase());
-    this.excludes = this.configValues.exclude.map(s => s.toLowerCase());
+    this.filters = { include: this.configValues.include, exclude: this.configValues.exclude };
     if (this.configValues.realtime && this.configValues.coiot) {
       this.coiot = new CoIoTListener((level, message) => this.log[level](message));
     }
@@ -107,8 +106,9 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
 
   private async registerEndpoint(endpoint: DeviceConfig): Promise<void> {
     const { client, device } = await readNormalizedDevice(endpoint, this.configValues.requestTimeout * 1000, (level, message) => this.log[level](message));
-    if (!this.matchesFilters(device, endpoint)) return;
-    device.components = device.components.filter(component => this.matchesFilters(device, endpoint, component));
+    if (!matchesGlobalFilters(this.filters, device, endpoint)) return;
+    device.components = device.components.filter(component =>
+      matchesGlobalFilters(this.filters, device, endpoint, component) && matchesDeviceFilters(endpoint, component));
     if (this.configValues.splitChannels && device.components.length > 0) {
       for (const component of device.components) {
         // Inputs don't currently map to a HomeKit service, so a per-input
@@ -119,14 +119,6 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
       return;
     }
     this.registerDeviceAccessory(client, device, endpoint);
-  }
-
-  private matchesFilters(device: NormalizedShellyDevice, endpoint: DeviceConfig, component?: ShellyComponent): boolean {
-    const haystack = [endpoint.host, device.host, device.id, device.mac, device.model, device.name, endpoint.name, component?.key, component?.name, component?.type]
-      .filter(Boolean).join(' ').toLowerCase();
-    if (this.includes.length > 0 && !this.includes.some(s => haystack.includes(s))) return false;
-    if (this.excludes.some(s => haystack.includes(s))) return false;
-    return true;
   }
 
   private accessoryOptions(endpoint: DeviceConfig): AccessoryOptions {
