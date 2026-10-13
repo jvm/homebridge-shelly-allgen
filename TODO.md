@@ -17,7 +17,7 @@ Forward-looking work only. Add, remove, or correct entries — this file is not 
 
 ## Energy metering
 
-- Use `Service.Outlet` (with `OutletInUse`) instead of `Service.Switch` for relay components that represent plugs; pick the service type from the Shelly model class.
+- Auto-detect Gen3/Gen4 plug models (e.g. Plug S Gen3) as Outlet; only Gen1 `SHPLG-*` and Gen2 `SNPL-*` are detected today, others need `serviceType: "outlet"`.
 - Parse and expose Gen2 `em:N` / `emdata:N` components (Gen2 EM devices) as `meter` components, mirroring the Gen1 `emeters[]` handling.
 - Add Eve history (fakegato-style) so the Eve app can chart consumption over time, not just show the live value.
 
@@ -30,7 +30,7 @@ Forward-looking work only. Add, remove, or correct entries — this file is not 
 - Test Shelly 2.5 roller position commands on a calibrated device; only send `go=stop` when the roller is actually moving (Gen1 returns an error otherwise — `src/shelly/gen1-client.ts:79-82`).
 - Log the active profile for Gen2 multi-profile devices (e.g. Plus2PM switch vs cover) so users can diagnose missing components.
 - Add Gen1 RGBW `/color/{id}` and `/white/{id}` endpoint handling.
-- Handle Gen1 battery-powered sensor polling (longer intervals, offline tolerance, per-component override).
+- Handle Gen1 battery-powered sensor polling: longer intervals, and detect sleeping devices so offline reporting does not need a manual `offlineAfterFailures: 0`.
 - Map Shelly Gas sensor concentration data more richly (PPM thresholds).
 - Wire `input` components to a HomeKit service (`StatelessProgrammableSwitch`); they are currently skipped under `splitChannels` to avoid empty accessories.
 - Re-introduce light color control (`hue` / `saturation` / `colorTemperature`) on `LightCommand` once Gen1/Gen2 color endpoints are implemented — the fields were removed as dead API surface.
@@ -41,10 +41,9 @@ Forward-looking work only. Add, remove, or correct entries — this file is not 
 - Add integration tests with mock Shelly HTTP servers for both generations.
 - Add integration tests for Gen2 WebSocket notification merge.
 - Add tests for `mdns.mergeDiscovered` (manual-config-wins semantics, MAC dedupe).
-- Add tests for include/exclude filter logic.
 - Add tests for `splitChannels` mode (including that input-only components are skipped).
 - Add tests for stale accessory removal.
-- Add tests for device offline / auth error handling paths.
+- Add tests for auth error handling paths in the accessory/platform layer.
 - Test plugin load on a clean Homebridge v2 instance.
 
 ## Discovery
@@ -55,7 +54,6 @@ Forward-looking work only. Add, remove, or correct entries — this file is not 
 
 ## Robustness
 
-- Add stale-state detection and `StatusFault` characteristic updates.
 - Handle optimistic write reconciliation more explicitly (verify after SET).
 - Rate-limit concurrent device requests to avoid LAN flooding (`Promise.allSettled` fan-out is unbounded in `src/platform.ts:69`).
 

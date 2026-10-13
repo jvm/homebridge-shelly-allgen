@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-13
+
 ### Changed
 - Existing plug accessories and Gen1 relays with `appliance_type` `outlet` or `lights` change from a Switch service to an Outlet or Lightbulb service on upgrade. HomeKit treats this as a new service: scenes and automations that used the old Switch must be set up again. Set `"serviceType": "switch"` on the device to keep the old mapping.
 

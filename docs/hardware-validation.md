@@ -60,6 +60,29 @@ Validated coverage includes a Homebridge-managed Node.js runtime with both disco
 
 ## Validation entries
 
+## 0.3.0 — PENDING — Stale service pruning, offline reporting, per-device filters, Outlet/Lightbulb relay mapping, Shelly Gas fix
+
+Status: **not yet validated on hardware.** Unit-tested only. Install the packed `homebridge-shelly-allgen-0.3.0.tgz` on a Homebridge host with an existing 0.2.0 accessory cache and record results here before publishing.
+
+- Package/commit: `0.3.0` (branch `release-0.3.0`)
+- Runtime: <Homebridge version>, <Node.js version>, <OS family>
+- Configuration to test: discovery and manual devices; upgrade over an existing 0.2.0 cache (not a fresh install)
+- Authentication tested: none expected (open HTTP devices)
+- Realtime to observe: polling, Gen1 CoIoT, Gen2+ WebSocket
+
+Checks per device:
+
+- **Plug S (SHPLG-S), Gen1:** cached Switch is replaced by an Outlet (one service, no leftover Switch). On/off works from Home. Outlet In Use is true under load above 2 W and false with no load. Eve app still shows Consumption and Total Consumption on the Outlet.
+- **Plus Plug S (SNPL-00112EU), Gen2+:** same Outlet checks as Plug S, plus Voltage and Electric Current in Eve. Outlet In Use updates over the WebSocket without waiting for a poll.
+- **Shelly 2.5 (SHSW-25), roller mode:** only the WindowCovering service remains; no relay services reappear. Position control unchanged.
+- **Shelly 1PM (SHSW-PM), appliance type outlet:** confirm `/settings` `relays[0].appliance_type` is `outlet`; relay shows as an Outlet with power. Then set `serviceType: "switch"` on the device and confirm it returns to a Switch and the Outlet is removed.
+- **Shelly 1 (SHSW-1):** stays a Switch (or Lightbulb if its appliance type is `lights`). No power characteristics.
+- **Shelly Gas (SHGS-1):** idle shows no alarm and Status Fault clear. During warm-up after power-on, no gas alarm and Status Fault set (previously a false Leak Detected). Try `gasSensorType` `smoke` and `co`: the service is replaced, and the old LeakSensor is removed. Do not trigger a real alarm; if a self-test is run, note how `alarm_state` and Home behave.
+- **Shelly 3EM (SHEM-3):** with `"exclude": ["switch:0"]` on the device entry, the contactor relay service is removed from the cached accessory and the three Eve Consumption meters remain.
+- **Offline:** unplug or block one device. After 3 polls Home shows "No Response", sensors show Status Fault, and the log has exactly one "is not responding" info line. Restore it: one "is responding again" line and state returns. Repeat with `offlineAfterFailures: 0` and confirm no "No Response".
+- **Write tests:** on/off on Outlet, Switch, and Lightbulb services only; cover position on the 2.5.
+- Rollback notes: downgrading to 0.2.0 re-adds Switch services next to the new Outlet/Lightbulb/Smoke/CO services in the cache. Remove the affected accessories from the Homebridge cache (or enable `removeStaleAccessories`) after a downgrade. Scenes and automations on changed services must be set up again either way.
+
 ## Unreleased — Gen1 meter power, roller-mode relay suppression, null position handling
 
 - Package/commit: `unreleased` (TODO.md "Testing" follow-up)
