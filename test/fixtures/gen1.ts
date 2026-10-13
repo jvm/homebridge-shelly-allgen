@@ -131,6 +131,33 @@ export const gasAlarm = {
   settings: {},
 };
 
+/** Shelly Gas: warming up after power-on. Not an alarm; reported as a fault. */
+export const gasWarmup = {
+  status: {
+    gas_sensor: { sensor_state: 'warmup', self_test_state: 'not_completed', alarm_state: 'none' },
+    concentration: { ppm: 0, is_valid: false },
+  },
+  settings: {},
+};
+
+/** Shelly Gas: heavy alarm while the sensor also reports a fault. */
+export const gasHeavyFault = {
+  status: {
+    gas_sensor: { sensor_state: 'fault', self_test_state: 'completed', alarm_state: 'heavy' },
+    concentration: { ppm: 4000, is_valid: true },
+  },
+  settings: {},
+};
+
+/** Shelly Gas: normal sensor whose self-test reports an unrecognized (failed) state. */
+export const gasSelfTestFailed = {
+  status: {
+    gas_sensor: { sensor_state: 'normal', self_test_state: 'failed', alarm_state: 'none' },
+    concentration: { ppm: 0, is_valid: true },
+  },
+  settings: {},
+};
+
 /** Shelly H&T: temperature and humidity sensors. */
 export const tempHumidity = {
   status: {

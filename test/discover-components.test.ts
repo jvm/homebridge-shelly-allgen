@@ -92,15 +92,33 @@ describe('Gen1Client.discoverComponents', () => {
   it('reports a gas sensor as not-alarmed when idle', async () => {
     mockRoutes({ '/status': gen1.gasIdle.status, '/settings': gen1.gasIdle.settings });
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: false, unit: '0 ppm' } },
+      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: false, fault: false, unit: '0 ppm' } },
     ]);
   });
 
   it('reports a gas sensor as alarmed with a concentration reading', async () => {
     mockRoutes({ '/status': gen1.gasAlarm.status, '/settings': gen1.gasAlarm.settings });
     expect(await gen1Client().discoverComponents()).toEqual([
-      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: true, unit: '180 ppm' } },
+      { key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: true, fault: false, unit: '180 ppm' } },
     ]);
+  });
+
+  it('reports gas sensor warm-up as a fault, not an alarm', async () => {
+    mockRoutes({ '/status': gen1.gasWarmup.status, '/settings': gen1.gasWarmup.settings });
+    const [gas] = await gen1Client().discoverComponents();
+    expect(gas.state).toEqual({ value: false, fault: true, unit: '0 ppm' });
+  });
+
+  it('derives the gas alarm from alarm_state alone, even when the sensor reports a fault', async () => {
+    mockRoutes({ '/status': gen1.gasHeavyFault.status, '/settings': gen1.gasHeavyFault.settings });
+    const [gas] = await gen1Client().discoverComponents();
+    expect(gas.state).toEqual({ value: true, fault: true, unit: '4000 ppm' });
+  });
+
+  it('reports a failed gas self-test as a fault', async () => {
+    mockRoutes({ '/status': gen1.gasSelfTestFailed.status, '/settings': gen1.gasSelfTestFailed.settings });
+    const [gas] = await gen1Client().discoverComponents();
+    expect(gas.state).toEqual({ value: false, fault: true, unit: '0 ppm' });
   });
 
   it('normalizes a temperature + humidity sensor', async () => {

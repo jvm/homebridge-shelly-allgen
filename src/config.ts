@@ -1,6 +1,9 @@
 import type { PlatformConfig } from 'homebridge';
 import type { DeviceEndpoint } from './shelly/types.js';
 
+export const GAS_SENSOR_TYPES = ['leak', 'smoke', 'co'] as const;
+export type GasSensorType = typeof GAS_SENSOR_TYPES[number];
+
 export interface DeviceConfig extends DeviceEndpoint {
   /** Overrides the platform-wide `offlineAfterFailures` for this device; 0 disables offline reporting. */
   offlineAfterFailures?: number;
@@ -28,6 +31,8 @@ export interface ShellyAllGenConfig {
   exclude: string[];
   /** Consecutive failed polls before a device reports "No Response"; 0 disables. */
   offlineAfterFailures: number;
+  /** HomeKit service for Shelly Gas sensors: LeakSensor, SmokeSensor, or CarbonMonoxideSensor. */
+  gasSensorType: GasSensorType;
   debug: boolean;
 }
 
@@ -35,6 +40,10 @@ function positiveInt(raw: unknown, fallback: number, min: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.floor(n));
+}
+
+function oneOf<T extends string>(raw: unknown, allowed: readonly T[]): T | undefined {
+  return allowed.find(v => v === raw);
 }
 
 function parseDevice(raw: DeviceConfig): DeviceConfig {
@@ -59,6 +68,7 @@ export function parseConfig(config: PlatformConfig): ShellyAllGenConfig {
     include: stringList(config.include),
     exclude: stringList(config.exclude),
     offlineAfterFailures: positiveInt(config.offlineAfterFailures, 3, 0),
+    gasSensorType: oneOf(config.gasSensorType, GAS_SENSOR_TYPES) ?? 'leak',
     debug: config.debug === true,
   };
 }

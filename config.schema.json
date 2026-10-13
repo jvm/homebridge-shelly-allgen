@@ -118,6 +118,13 @@
         "default": true,
         "description": "Listen for Gen1 CoIoT (CoAP) notifications on UDP 5683 and refresh devices immediately when they push. Multicast and unicast both supported. Requires Homebridge on the same L2 segment unless devices are configured to unicast directly to the Homebridge host."
       },
+      "gasSensorType": {
+        "title": "Gas Sensor Service",
+        "type": "string",
+        "enum": ["leak", "smoke", "co"],
+        "default": "leak",
+        "description": "HomeKit service for Shelly Gas sensors: leak (LeakSensor, default), smoke (SmokeSensor), or co (CarbonMonoxideSensor). Changing it replaces the service, so automations that use it must be recreated."
+      },
       "include": {
         "title": "Include Filter",
         "type": "array",
@@ -187,7 +194,7 @@
       "title": "Advanced",
       "expandable": true,
       "expanded": false,
-      "items": ["splitChannels", "removeStaleAccessories", "debug"]
+      "items": ["gasSensorType", "splitChannels", "removeStaleAccessories", "debug"]
     }
   ]
 }

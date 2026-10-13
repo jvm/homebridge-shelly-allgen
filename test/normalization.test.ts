@@ -52,4 +52,11 @@ describe('parseConfig', () => {
     expect(cfg.devices[0].exclude).toEqual(['switch:0', '1']);
     expect(cfg.devices[1].include).toEqual([]);
   });
+
+  it('defaults gasSensorType to leak and accepts smoke/co', () => {
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X' } as never).gasSensorType).toBe('leak');
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', gasSensorType: 'co' } as never).gasSensorType).toBe('co');
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', gasSensorType: 'smoke' } as never).gasSensorType).toBe('smoke');
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', gasSensorType: 'methane' } as never).gasSensorType).toBe('leak');
+  });
 });

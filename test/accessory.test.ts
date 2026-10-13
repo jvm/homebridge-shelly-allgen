@@ -138,3 +138,41 @@ describe('offline reporting', () => {
     expect(platform.log.info).toHaveBeenCalledWith(expect.stringContaining('responding again'));
   });
 });
+
+describe('gas sensor', () => {
+  const gas = (value: boolean, fault = false): ShellyComponent => ({ key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value, fault, unit: '0 ppm' } });
+
+  it.each([
+    ['leak', hap.Service.LeakSensor, hap.Characteristic.LeakDetected],
+    ['smoke', hap.Service.SmokeSensor, hap.Characteristic.SmokeDetected],
+    ['co', hap.Service.CarbonMonoxideSensor, hap.Characteristic.CarbonMonoxideDetected],
+  ] as const)('maps gasSensorType %s to its HomeKit service', async (gasSensorType, service, characteristic) => {
+    const { accessory } = track(createAccessory({ components: [gas(true)], options: { gasSensorType } }));
+    const svc = accessory.getServiceById(service, 'sensor:gas')!;
+    expect(svc).toBeDefined();
+    await expect(svc.getCharacteristic(characteristic).handleGetRequest()).resolves.toBe(1);
+  });
+
+  it('replaces the cached LeakSensor when gasSensorType changes', () => {
+    const accessory = new FakePlatformAccessory('Gas');
+    accessory.addService(hap.Service.LeakSensor, 'Natural Gas', 'sensor:gas');
+    track(createAccessory({ accessory, components: [gas(false)], options: { gasSensorType: 'co' } }));
+    expect(nonInfo(accessory).map(s => s.UUID)).toEqual([hap.Service.CarbonMonoxideSensor.UUID]);
+  });
+
+  it('reports warm-up as StatusFault without a gas alarm', async () => {
+    const { accessory } = track(createAccessory({ components: [gas(false, true)] }));
+    const svc = accessory.getServiceById(hap.Service.LeakSensor, 'sensor:gas')!;
+    await expect(svc.getCharacteristic(hap.Characteristic.LeakDetected).handleGetRequest()).resolves.toBe(0);
+    await expect(svc.getCharacteristic(hap.Characteristic.StatusFault).handleGetRequest()).resolves.toBe(hap.Characteristic.StatusFault.GENERAL_FAULT);
+  });
+
+  it('pushes alarm and fault changes from polling', async () => {
+    const { accessory, client } = track(createAccessory({ components: [gas(false, true)] }));
+    const svc = accessory.getServiceById(hap.Service.LeakSensor, 'sensor:gas')!;
+    client.discoverComponents.mockResolvedValue([gas(true, false)]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(svc.getCharacteristic(hap.Characteristic.LeakDetected).value).toBe(1);
+    expect(svc.getCharacteristic(hap.Characteristic.StatusFault).value).toBe(hap.Characteristic.StatusFault.NO_FAULT);
+  });
+});

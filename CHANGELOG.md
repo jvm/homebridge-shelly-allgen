@@ -10,9 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Offline reporting. After `offlineAfterFailures` consecutive failed polls (default 3), reads fail with `SERVICE_COMMUNICATION_FAILURE` so Apple Home shows "No Response", and sensor services set `StatusFault`. The next successful poll or realtime update clears it. One info line is logged when a device goes offline and one when it recovers. `0` disables it; `devices[].offlineAfterFailures` overrides it per device (use `0` for sleeping battery sensors).
 - Per-device `include` / `exclude` filters on `devices[]` entries. They match only that device's components: key (`relay:0`, `emeter:1`), the generation-neutral `<type>:<id>` alias (`switch:0` also selects a Gen1 `relay:0`), name, and type. Blank terms are ignored. Platform-wide `include` / `exclude` are unchanged. Example: a Shelly 3EM with `"exclude": ["switch:0"]` hides its contactor relay.
 - Unit tests for platform-wide and per-device include/exclude filter logic.
+- `gasSensorType` (`leak` | `smoke` | `co`, default `leak`) selects the HomeKit service for Shelly Gas sensors: LeakSensor, SmokeSensor, or CarbonMonoxideSensor.
+- Sensor services now push value and `StatusFault` changes found by polling or realtime updates, so HomeKit notifications (e.g. a gas alarm) no longer wait for the controller to read the value.
 
 ### Fixed
 - Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.
+- Shelly Gas no longer raises a false gas alarm during warm-up or on a sensor fault. Detection is derived from `alarm_state` alone (`mild` / `heavy`); a `sensor_state` other than `normal` (warmup, fault, unknown) or a failed `self_test_state` is reported as `StatusFault` instead.
 
 ## [0.2.0] — 2026-05-14
 

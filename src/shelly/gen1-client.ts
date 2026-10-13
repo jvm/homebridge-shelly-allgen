@@ -7,6 +7,25 @@ import type { CoverCommand, Credentials, LightCommand, ShellyClient, ShellyCompo
  * model uses watt-hours everywhere. `emeters` already report watt-hours and are
  * passed through unchanged.
  */
+/** Shelly Gas `self_test_state` values that are not a failure; anything else is reported as a fault. */
+const GAS_SELF_TEST_OK = new Set(['not_completed', 'completed', 'running', 'pending']);
+
+/**
+ * Shelly Gas: only `alarm_state` `mild` / `heavy` means gas was detected
+ * (`none` is idle, `test` is a self-test alarm). A `sensor_state` other than
+ * `normal` (warmup, fault, unknown) or a failed self-test is a fault, not an
+ * alarm — previously it raised a false gas alarm.
+ */
+function gasState(gas: Dict, ppm: number | undefined) {
+  const alarm = str(gas.alarm_state);
+  const selfTest = str(gas.self_test_state);
+  return {
+    value: alarm === 'mild' || alarm === 'heavy',
+    fault: str(gas.sensor_state) !== 'normal' || (selfTest !== undefined && !GAS_SELF_TEST_OK.has(selfTest)),
+    unit: ppm !== undefined ? `${ppm} ppm` : undefined,
+  };
+}
+
 function meterWh(wattMinutes: unknown): number | undefined {
   const wm = num(wattMinutes);
   return wm === undefined ? undefined : Math.round(wm / 60);
@@ -103,7 +122,7 @@ export class Gen1Client implements ShellyClient {
     if (gas) {
       const concentration = obj(status.concentration);
       const ppm = num(concentration?.ppm);
-      out.push({ key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: { value: gas.alarm_state !== 'none' || gas.sensor_state !== 'normal', unit: ppm !== undefined ? `${ppm} ppm` : undefined } });
+      out.push({ key: 'sensor:gas', type: 'sensor', id: 4, name: 'Natural Gas', sensorKind: 'gas', state: gasState(gas, ppm) });
     }
     return out;
   }

@@ -28,7 +28,8 @@ export interface SwitchState { on: boolean; power?: number; voltage?: number; cu
 export interface LightState extends SwitchState { brightness?: number; hue?: number; saturation?: number; colorTemperature?: number }
 export interface CoverState { currentPosition?: number; targetPosition?: number; moving: 'opening' | 'closing' | 'stopped'; closed?: boolean }
 export interface InputState { active?: boolean; event?: string; eventCount?: number }
-export interface SensorState { value: boolean | number | string | null; unit?: string }
+/** `fault` marks a sensor that cannot be trusted right now (e.g. a gas sensor warming up or failing self-test); HomeKit shows it as StatusFault. */
+export interface SensorState { value: boolean | number | string | null; unit?: string; fault?: boolean }
 /** A standalone energy-metering channel with no associated relay/light (e.g. a Shelly EM/3EM CT clamp). */
 export interface MeterState { power?: number; voltage?: number; current?: number; powerFactor?: number; energy?: number; energyReturned?: number }
 

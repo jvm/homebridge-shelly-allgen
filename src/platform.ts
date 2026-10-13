@@ -124,6 +124,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
   private accessoryOptions(endpoint: DeviceConfig): AccessoryOptions {
     return {
       offlineAfterFailures: endpoint.offlineAfterFailures ?? this.configValues.offlineAfterFailures,
+      gasSensorType: this.configValues.gasSensorType,
     };
   }
 

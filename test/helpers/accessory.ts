@@ -63,7 +63,7 @@ export function device(components: ShellyComponent[], overrides: Partial<Normali
   };
 }
 
-export const defaultOptions: AccessoryOptions = { offlineAfterFailures: 3 };
+export const defaultOptions: AccessoryOptions = { offlineAfterFailures: 3, gasSensorType: 'leak' };
 
 export function createAccessory(opts: {
   components: ShellyComponent[];

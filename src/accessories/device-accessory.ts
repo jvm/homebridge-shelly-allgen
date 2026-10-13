@@ -1,4 +1,5 @@
 import type { Characteristic, CharacteristicValue, PlatformAccessory, Service, WithUUID } from 'homebridge';
+import type { GasSensorType } from '../config.js';
 import type { ShellyAllGenPlatform } from '../platform.js';
 import type { NormalizedShellyDevice, ShellyClient, ShellyComponent } from '../shelly/types.js';
 
@@ -17,6 +18,14 @@ type EnergyCharacteristic = WithUUID<{ new (): Characteristic }>;
 export interface AccessoryOptions {
   /** Consecutive failed polls before the device reports "No Response"; 0 disables. */
   offlineAfterFailures: number;
+  /** HomeKit service for a Shelly Gas sensor. */
+  gasSensorType: GasSensorType;
+}
+
+/** The HomeKit service and primary characteristic a sensor kind maps to. */
+interface SensorMapping {
+  service: WithUUID<typeof Service>;
+  characteristic: WithUUID<new () => Characteristic>;
 }
 
 export class ShellyDeviceAccessory {
@@ -187,24 +196,27 @@ export class ShellyDeviceAccessory {
       .onGet(this.online(() => this.positionState(c.key)));
   }
 
+  private sensorMapping(kind: string): SensorMapping | undefined {
+    const { Service: S, Characteristic: C } = this.platform;
+    switch (kind) {
+      case 'temperature': return { service: S.TemperatureSensor, characteristic: C.CurrentTemperature };
+      case 'humidity': return { service: S.HumiditySensor, characteristic: C.CurrentRelativeHumidity };
+      case 'flood': return { service: S.LeakSensor, characteristic: C.LeakDetected };
+      case 'contact': return { service: S.ContactSensor, characteristic: C.ContactSensorState };
+      case 'gas':
+        if (this.options.gasSensorType === 'smoke') return { service: S.SmokeSensor, characteristic: C.SmokeDetected };
+        if (this.options.gasSensorType === 'co') return { service: S.CarbonMonoxideSensor, characteristic: C.CarbonMonoxideDetected };
+        return { service: S.LeakSensor, characteristic: C.LeakDetected };
+      default: return undefined;
+    }
+  }
+
   private configureSensor(c: SensorComponent) {
-    const map: Record<string, WithUUID<typeof Service> | undefined> = {
-      temperature: this.platform.Service.TemperatureSensor,
-      humidity: this.platform.Service.HumiditySensor,
-      flood: this.platform.Service.LeakSensor,
-      gas: this.platform.Service.LeakSensor,
-      contact: this.platform.Service.ContactSensor,
-    };
-    const type = map[c.sensorKind];
-    if (!type) return;
-    const svc = this.getService(type, c.name ?? `${this.device.name ?? this.device.model} ${c.sensorKind}`, c.key);
-    const ch =
-      c.sensorKind === 'temperature' ? this.platform.Characteristic.CurrentTemperature :
-      c.sensorKind === 'humidity' ? this.platform.Characteristic.CurrentRelativeHumidity :
-      (c.sensorKind === 'flood' || c.sensorKind === 'gas') ? this.platform.Characteristic.LeakDetected :
-      this.platform.Characteristic.ContactSensorState;
-    svc.getCharacteristic(ch).onGet(this.online(() => this.sensorValue(c.key, c.sensorKind)));
-    this.attachStatusFault(svc);
+    const mapping = this.sensorMapping(c.sensorKind);
+    if (!mapping) return;
+    const svc = this.getService(mapping.service, c.name ?? `${this.device.name ?? this.device.model} ${c.sensorKind}`, c.key);
+    svc.getCharacteristic(mapping.characteristic).onGet(this.online(() => this.sensorValue(c.key, c.sensorKind)));
+    this.attachStatusFault(svc, c.key);
   }
 
   /**
@@ -225,19 +237,21 @@ export class ShellyDeviceAccessory {
     return [...svc.characteristics, ...svc.optionalCharacteristics].some(c => c.UUID === uuid);
   }
 
-  private attachStatusFault(svc: Service) {
+  private attachStatusFault(svc: Service, key: string) {
     if (!this.supportsStatusFault(svc)) return;
-    svc.getCharacteristic(this.platform.Characteristic.StatusFault).onGet(() => this.statusFault());
+    svc.getCharacteristic(this.platform.Characteristic.StatusFault).onGet(() => this.statusFault(key));
   }
 
-  private statusFault(): number {
+  /** GENERAL_FAULT while the device is offline or the component itself reports a fault (e.g. gas sensor warm-up). */
+  private statusFault(key: string): number {
     const { GENERAL_FAULT, NO_FAULT } = this.platform.Characteristic.StatusFault;
-    return this.offline ? GENERAL_FAULT : NO_FAULT;
+    const state = this.components.get(key)?.state as { fault?: boolean } | undefined;
+    return this.offline || state?.fault ? GENERAL_FAULT : NO_FAULT;
   }
 
   private updateStatusFaults() {
-    for (const svc of this.services.values()) {
-      if (this.supportsStatusFault(svc)) svc.updateCharacteristic(this.platform.Characteristic.StatusFault, this.statusFault());
+    for (const [key, svc] of this.services) {
+      if (this.supportsStatusFault(svc)) svc.updateCharacteristic(this.platform.Characteristic.StatusFault, this.statusFault(key));
     }
   }
 
@@ -301,6 +315,10 @@ export class ShellyDeviceAccessory {
       svc.updateCharacteristic(this.platform.Characteristic.PositionState, this.positionState(key));
     } else if (c.type === 'meter') {
       this.updateEnergy(svc, key);
+    } else if (c.type === 'sensor') {
+      const mapping = this.sensorMapping(c.sensorKind);
+      if (mapping) svc.updateCharacteristic(mapping.characteristic, this.sensorValue(key, c.sensorKind));
+      if (this.supportsStatusFault(svc)) svc.updateCharacteristic(this.platform.Characteristic.StatusFault, this.statusFault(key));
     }
   }
 
