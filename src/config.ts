@@ -1,12 +1,9 @@
 import type { PlatformConfig } from 'homebridge';
+import type { DeviceEndpoint } from './shelly/types.js';
 
-export interface DeviceConfig {
-  host: string;
-  name?: string;
-  username?: string;
-  password?: string;
-  protocol?: 'http' | 'https';
-  generation?: 'auto' | 'gen1' | 'gen2';
+export interface DeviceConfig extends DeviceEndpoint {
+  /** Overrides the platform-wide `offlineAfterFailures` for this device; 0 disables offline reporting. */
+  offlineAfterFailures?: number;
 }
 
 export interface ShellyAllGenConfig {
@@ -21,6 +18,8 @@ export interface ShellyAllGenConfig {
   removeStaleAccessories: boolean;
   include: string[];
   exclude: string[];
+  /** Consecutive failed polls before a device reports "No Response"; 0 disables. */
+  offlineAfterFailures: number;
   debug: boolean;
 }
 
@@ -30,11 +29,17 @@ function positiveInt(raw: unknown, fallback: number, min: number): number {
   return Math.max(min, Math.floor(n));
 }
 
+function parseDevice(raw: DeviceConfig): DeviceConfig {
+  const device: DeviceConfig = { ...raw };
+  if (raw.offlineAfterFailures !== undefined) device.offlineAfterFailures = positiveInt(raw.offlineAfterFailures, 3, 0);
+  return device;
+}
+
 export function parseConfig(config: PlatformConfig): ShellyAllGenConfig {
   return {
     name: String(config.name ?? 'Homebridge Shelly AllGen'),
     discovery: config.discovery !== false,
-    devices: Array.isArray(config.devices) ? config.devices.filter((d): d is DeviceConfig => !!d?.host) : [],
+    devices: Array.isArray(config.devices) ? config.devices.filter((d): d is DeviceConfig => !!d?.host).map(parseDevice) : [],
     pollInterval: positiveInt(config.pollInterval, 5, 5),
     requestTimeout: positiveInt(config.requestTimeout, 5, 1),
     realtime: config.realtime !== false,
@@ -43,6 +48,7 @@ export function parseConfig(config: PlatformConfig): ShellyAllGenConfig {
     removeStaleAccessories: config.removeStaleAccessories === true,
     include: Array.isArray(config.include) ? config.include.map(String) : [],
     exclude: Array.isArray(config.exclude) ? config.exclude.map(String) : [],
+    offlineAfterFailures: positiveInt(config.offlineAfterFailures, 3, 0),
     debug: config.debug === true,
   };
 }

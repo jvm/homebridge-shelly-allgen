@@ -34,4 +34,16 @@ describe('parseConfig', () => {
     const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a' }, { name: 'no-host' }, null] } as never);
     expect(cfg.devices).toEqual([{ host: 'a' }]);
   });
+
+  it('defaults offlineAfterFailures to 3 and accepts 0 to disable', () => {
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X' } as never).offlineAfterFailures).toBe(3);
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', offlineAfterFailures: 0 } as never).offlineAfterFailures).toBe(0);
+    expect(parseConfig({ platform: 'ShellyAllGen', name: 'X', offlineAfterFailures: 'nope' } as never).offlineAfterFailures).toBe(3);
+  });
+
+  it('parses a per-device offlineAfterFailures override', () => {
+    const cfg = parseConfig({ platform: 'ShellyAllGen', name: 'X', devices: [{ host: 'a', offlineAfterFailures: 0 }, { host: 'b' }] } as never);
+    expect(cfg.devices[0].offlineAfterFailures).toBe(0);
+    expect(cfg.devices[1]).not.toHaveProperty('offlineAfterFailures');
+  });
 });

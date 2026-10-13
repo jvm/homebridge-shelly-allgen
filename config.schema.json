@@ -63,6 +63,12 @@
               "default": "auto",
               "title": "Generation",
               "description": "Force a generation if auto-detection picks the wrong one."
+            },
+            "offlineAfterFailures": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Offline After Failed Polls",
+              "description": "Overrides the platform-wide setting for this device. Set 0 for battery-powered sensors that sleep between reports."
             }
           }
         }
@@ -80,6 +86,13 @@
         "default": 5,
         "minimum": 1,
         "description": "Per-request HTTP timeout. Increase on slow networks or for devices under high CPU load."
+      },
+      "offlineAfterFailures": {
+        "title": "Offline After Failed Polls",
+        "type": "integer",
+        "default": 3,
+        "minimum": 0,
+        "description": "After this many consecutive failed polls, the device shows \"No Response\" in Apple Home and sensors set Status Fault. The next successful poll or realtime update clears it. 0 disables offline reporting."
       },
       "realtime": {
         "title": "Gen2 WebSocket Realtime",
@@ -148,7 +161,7 @@
       "title": "Polling & Realtime",
       "expandable": true,
       "expanded": false,
-      "items": ["pollInterval", "requestTimeout", "realtime", "coiot"]
+      "items": ["pollInterval", "requestTimeout", "offlineAfterFailures", "realtime", "coiot"]
     },
     {
       "type": "fieldset",

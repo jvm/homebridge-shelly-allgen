@@ -13,6 +13,12 @@ type EnergyFields = { power?: number; voltage?: number; current?: number; energy
 /** An Eve custom characteristic constructor (see src/accessories/eve.ts). */
 type EnergyCharacteristic = WithUUID<{ new (): Characteristic }>;
 
+/** Per-device behaviour resolved by the platform from global and `devices[]` config. */
+export interface AccessoryOptions {
+  /** Consecutive failed polls before the device reports "No Response"; 0 disables. */
+  offlineAfterFailures: number;
+}
+
 export class ShellyDeviceAccessory {
   private readonly services = new Map<string, Service>();
   private readonly components = new Map<string, ShellyComponent>();
@@ -23,12 +29,15 @@ export class ShellyDeviceAccessory {
   private coiotDebounce?: NodeJS.Timeout;
   private coiotRegistered = false;
   private closed = false;
+  private failedPolls = 0;
+  private offline = false;
 
   constructor(
     private readonly platform: ShellyAllGenPlatform,
     private readonly accessory: PlatformAccessory,
     private readonly client: ShellyClient,
     private device: NormalizedShellyDevice,
+    private readonly options: AccessoryOptions,
     private readonly allowedComponentKeys?: Set<string>,
   ) {
     this.updateInfo();
@@ -94,7 +103,7 @@ export class ShellyDeviceAccessory {
   private configureSwitch(c: SwitchComponent) {
     const svc = this.getService(this.platform.Service.Switch, c.name ?? `${this.device.name ?? this.device.model} Switch ${c.id + 1}`, c.key);
     svc.getCharacteristic(this.platform.Characteristic.On)
-      .onGet(() => this.getState(c.key, 'switch')?.on ?? false)
+      .onGet(this.online(() => this.getState(c.key, 'switch')?.on ?? false))
       .onSet(async v => {
         await this.client.setSwitch(c.id, v as boolean);
         this.patch(c.key, { on: v as boolean });
@@ -105,10 +114,10 @@ export class ShellyDeviceAccessory {
   private configureLight(c: LightComponent) {
     const svc = this.getService(this.platform.Service.Lightbulb, c.name ?? `${this.device.name ?? this.device.model} Light ${c.id + 1}`, c.key);
     svc.getCharacteristic(this.platform.Characteristic.On)
-      .onGet(() => this.getState(c.key, 'light')?.on ?? false)
+      .onGet(this.online(() => this.getState(c.key, 'light')?.on ?? false))
       .onSet(async v => { await this.client.setLight(c.id, { on: v as boolean }); this.patch(c.key, { on: v as boolean }); });
     svc.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onGet(() => this.getState(c.key, 'light')?.brightness ?? 100)
+      .onGet(this.online(() => this.getState(c.key, 'light')?.brightness ?? 100))
       .onSet(async v => { await this.client.setLight(c.id, { brightness: Number(v) }); this.patch(c.key, { brightness: Number(v) }); });
     this.configureEnergy(svc, c.key, c.state);
   }
@@ -142,7 +151,7 @@ export class ShellyDeviceAccessory {
   private attachEnergy(svc: Service, characteristic: EnergyCharacteristic, key: string, field: keyof EnergyFields) {
     const known = [...svc.characteristics, ...svc.optionalCharacteristics].some(c => c.UUID === characteristic.UUID);
     if (!known) svc.addOptionalCharacteristic(characteristic);
-    svc.getCharacteristic(characteristic).onGet(() => this.energyValue(key, field));
+    svc.getCharacteristic(characteristic).onGet(this.online(() => this.energyValue(key, field)));
   }
 
   /** Current value for an Eve energy characteristic. `energy` is Wh in the component model; Eve's TotalConsumption is kWh. */
@@ -167,15 +176,15 @@ export class ShellyDeviceAccessory {
   private configureCover(c: CoverComponent) {
     const svc = this.getService(this.platform.Service.WindowCovering, c.name ?? `${this.device.name ?? this.device.model} Cover ${c.id + 1}`, c.key);
     svc.getCharacteristic(this.platform.Characteristic.CurrentPosition)
-      .onGet(() => this.getState(c.key, 'cover')?.currentPosition ?? 0);
+      .onGet(this.online(() => this.getState(c.key, 'cover')?.currentPosition ?? 0));
     svc.getCharacteristic(this.platform.Characteristic.TargetPosition)
-      .onGet(() => {
+      .onGet(this.online(() => {
         const state = this.getState(c.key, 'cover');
         return state?.targetPosition ?? state?.currentPosition ?? 0;
-      })
+      }))
       .onSet(async v => { await this.client.setCover(c.id, { action: 'position', position: Number(v) }); this.patch(c.key, { targetPosition: Number(v) }); });
     svc.getCharacteristic(this.platform.Characteristic.PositionState)
-      .onGet(() => this.positionState(c.key));
+      .onGet(this.online(() => this.positionState(c.key)));
   }
 
   private configureSensor(c: SensorComponent) {
@@ -194,7 +203,65 @@ export class ShellyDeviceAccessory {
       c.sensorKind === 'humidity' ? this.platform.Characteristic.CurrentRelativeHumidity :
       (c.sensorKind === 'flood' || c.sensorKind === 'gas') ? this.platform.Characteristic.LeakDetected :
       this.platform.Characteristic.ContactSensorState;
-    svc.getCharacteristic(ch).onGet(() => this.sensorValue(c.key, c.sensorKind));
+    svc.getCharacteristic(ch).onGet(this.online(() => this.sensorValue(c.key, c.sensorKind)));
+    this.attachStatusFault(svc);
+  }
+
+  /**
+   * Wrap an onGet handler so it fails with SERVICE_COMMUNICATION_FAILURE while
+   * the device is offline. HomeKit then shows "No Response" instead of the
+   * last cached state.
+   */
+  private online<T extends CharacteristicValue>(read: () => T): () => T {
+    return () => {
+      if (this.offline) throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+      return read();
+    };
+  }
+
+  /** Whether a service type declares StatusFault (sensors do; Switch/Outlet/Lightbulb/WindowCovering do not). */
+  private supportsStatusFault(svc: Service): boolean {
+    const uuid = this.platform.Characteristic.StatusFault.UUID;
+    return [...svc.characteristics, ...svc.optionalCharacteristics].some(c => c.UUID === uuid);
+  }
+
+  private attachStatusFault(svc: Service) {
+    if (!this.supportsStatusFault(svc)) return;
+    svc.getCharacteristic(this.platform.Characteristic.StatusFault).onGet(() => this.statusFault());
+  }
+
+  private statusFault(): number {
+    const { GENERAL_FAULT, NO_FAULT } = this.platform.Characteristic.StatusFault;
+    return this.offline ? GENERAL_FAULT : NO_FAULT;
+  }
+
+  private updateStatusFaults() {
+    for (const svc of this.services.values()) {
+      if (this.supportsStatusFault(svc)) svc.updateCharacteristic(this.platform.Characteristic.StatusFault, this.statusFault());
+    }
+  }
+
+  private get label(): string {
+    return `${this.device.name ?? this.device.model} (${this.device.host})`;
+  }
+
+  /** Count a failed poll; after `offlineAfterFailures` in a row, report the device offline once. */
+  private recordFailure() {
+    this.failedPolls++;
+    const limit = this.options.offlineAfterFailures;
+    if (limit <= 0 || this.offline || this.failedPolls < limit) return;
+    this.offline = true;
+    this.platform.log.info(`${this.label} is not responding after ${this.failedPolls} failed polls; reporting No Response.`);
+    this.updateStatusFaults();
+  }
+
+  /** A successful poll or realtime update clears the failure count and any offline state. */
+  private recordSuccess() {
+    this.failedPolls = 0;
+    if (!this.offline) return;
+    this.offline = false;
+    this.platform.log.info(`${this.label} is responding again.`);
+    this.updateStatusFaults();
   }
 
   private sensorValue(key: string, kind: string): CharacteristicValue {
@@ -245,6 +312,8 @@ export class ShellyDeviceAccessory {
     if (this.closed) return;
     try {
       const components = await this.client.discoverComponents();
+      if (this.closed) return;
+      this.recordSuccess();
       for (const c of components) {
         if (this.allowedComponentKeys && !this.allowedComponentKeys.has(c.key)) continue;
         const existing = this.components.get(c.key);
@@ -255,6 +324,7 @@ export class ShellyDeviceAccessory {
       }
     } catch (error) {
       this.platform.log.debug('Polling failed for', this.device.id, error);
+      if (!this.closed) this.recordFailure();
     }
   }
 
@@ -267,7 +337,10 @@ export class ShellyDeviceAccessory {
     }
     if (!this.client.subscribe) return;
     const unsubscribe = await this.client.subscribe(
-      update => this.patch(update.componentKey, update.state as Record<string, unknown>),
+      update => {
+        this.recordSuccess();
+        this.patch(update.componentKey, update.state as Record<string, unknown>);
+      },
       () => this.scheduleReconnect(),
     ).catch(error => { this.platform.log.debug('Realtime subscribe failed:', String(error)); return undefined; });
     if (this.closed) {

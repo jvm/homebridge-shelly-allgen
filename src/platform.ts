@@ -1,11 +1,11 @@
 import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig, Service } from 'homebridge';
-import { parseConfig, type ShellyAllGenConfig } from './config.js';
+import { parseConfig, type DeviceConfig, type ShellyAllGenConfig } from './config.js';
 import { discoverMdns, type DiscoveredEndpoint } from './discovery/mdns.js';
 import { CoIoTListener } from './discovery/coiot.js';
-import { ShellyDeviceAccessory } from './accessories/device-accessory.js';
+import { ShellyDeviceAccessory, type AccessoryOptions } from './accessories/device-accessory.js';
 import { createEveTypes, type EveTypes } from './accessories/eve.js';
 import { readNormalizedDevice } from './shelly/client.js';
-import type { DeviceEndpoint, NormalizedShellyDevice, ShellyClient, ShellyComponent } from './shelly/types.js';
+import type { NormalizedShellyDevice, ShellyClient, ShellyComponent } from './shelly/types.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
@@ -55,7 +55,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
   }
 
   private async discoverDevices(): Promise<void> {
-    const endpoints = new Map<string, DeviceEndpoint>();
+    const endpoints = new Map<string, DeviceConfig>();
     const macIndex = new Map<string, string>();
     for (const device of this.configValues.devices) {
       const key = device.host.toLowerCase();
@@ -87,7 +87,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  private mergeDiscovered(endpoints: Map<string, DeviceEndpoint>, macIndex: Map<string, string>, discovered: DiscoveredEndpoint) {
+  private mergeDiscovered(endpoints: Map<string, DeviceConfig>, macIndex: Map<string, string>, discovered: DiscoveredEndpoint) {
     const hostKey = discovered.host.toLowerCase();
     const existingHostKey = (discovered.mac && macIndex.get(discovered.mac)) ?? (endpoints.has(hostKey) ? hostKey : undefined);
     if (existingHostKey) {
@@ -105,7 +105,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     if (discovered.mac) macIndex.set(discovered.mac, hostKey);
   }
 
-  private async registerEndpoint(endpoint: DeviceEndpoint): Promise<void> {
+  private async registerEndpoint(endpoint: DeviceConfig): Promise<void> {
     const { client, device } = await readNormalizedDevice(endpoint, this.configValues.requestTimeout * 1000, (level, message) => this.log[level](message));
     if (!this.matchesFilters(device, endpoint)) return;
     device.components = device.components.filter(component => this.matchesFilters(device, endpoint, component));
@@ -121,7 +121,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     this.registerDeviceAccessory(client, device, endpoint);
   }
 
-  private matchesFilters(device: NormalizedShellyDevice, endpoint: DeviceEndpoint, component?: ShellyComponent): boolean {
+  private matchesFilters(device: NormalizedShellyDevice, endpoint: DeviceConfig, component?: ShellyComponent): boolean {
     const haystack = [endpoint.host, device.host, device.id, device.mac, device.model, device.name, endpoint.name, component?.key, component?.name, component?.type]
       .filter(Boolean).join(' ').toLowerCase();
     if (this.includes.length > 0 && !this.includes.some(s => haystack.includes(s))) return false;
@@ -129,7 +129,13 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     return true;
   }
 
-  private registerDeviceAccessory(client: ShellyClient, device: NormalizedShellyDevice, endpoint: DeviceEndpoint, component?: ShellyComponent): void {
+  private accessoryOptions(endpoint: DeviceConfig): AccessoryOptions {
+    return {
+      offlineAfterFailures: endpoint.offlineAfterFailures ?? this.configValues.offlineAfterFailures,
+    };
+  }
+
+  private registerDeviceAccessory(client: ShellyClient, device: NormalizedShellyDevice, endpoint: DeviceConfig, component?: ShellyComponent): void {
     const baseId = device.mac || device.id;
     const uuid = this.api.hap.uuid.generate(component ? `shelly:${baseId}:${component.key}` : `shelly:${baseId}`);
     if (this.discovered.has(uuid)) {
@@ -151,7 +157,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
       this.log.info('Restored Shelly accessory:', displayName, `(${device.host})`);
     }
     this.handlers.get(uuid)?.close();
-    this.handlers.set(uuid, new ShellyDeviceAccessory(this, accessory, client, device, component ? new Set([component.key]) : undefined));
+    this.handlers.set(uuid, new ShellyDeviceAccessory(this, accessory, client, device, this.accessoryOptions(endpoint), component ? new Set([component.key]) : undefined));
     // Persist after the handler has pruned stale services from the cached accessory.
     if (restored) this.api.updatePlatformAccessories([accessory]);
   }

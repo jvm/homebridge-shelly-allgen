@@ -6,7 +6,7 @@
 import * as hap from '@homebridge/hap-nodejs';
 import { vi } from 'vitest';
 import type { API, PlatformAccessory, PlatformConfig } from 'homebridge';
-import { ShellyDeviceAccessory } from '../../src/accessories/device-accessory.js';
+import { ShellyDeviceAccessory, type AccessoryOptions } from '../../src/accessories/device-accessory.js';
 import { createEveTypes } from '../../src/accessories/eve.js';
 import { parseConfig } from '../../src/config.js';
 import type { ShellyAllGenPlatform } from '../../src/platform.js';
@@ -63,12 +63,15 @@ export function device(components: ShellyComponent[], overrides: Partial<Normali
   };
 }
 
+export const defaultOptions: AccessoryOptions = { offlineAfterFailures: 3 };
+
 export function createAccessory(opts: {
   components: ShellyComponent[];
   accessory?: FakePlatformAccessory;
   platform?: FakePlatform;
   client?: ReturnType<typeof fakeClient>;
   device?: Partial<NormalizedShellyDevice>;
+  options?: Partial<AccessoryOptions>;
   allowedComponentKeys?: Set<string>;
 }) {
   const platform = opts.platform ?? fakePlatform();
@@ -79,6 +82,7 @@ export function createAccessory(opts: {
     accessory as unknown as PlatformAccessory,
     client,
     device(opts.components, opts.device),
+    { ...defaultOptions, ...opts.options },
     opts.allowedComponentKeys,
   );
   return { platform, accessory, client, handler };

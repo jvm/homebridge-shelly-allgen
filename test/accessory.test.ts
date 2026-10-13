@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellyComponent } from '../src/shelly/types.js';
-import { createAccessory, FakePlatformAccessory, hap } from './helpers/accessory.js';
+import { createAccessory, fakeClient, fakePlatform, FakePlatformAccessory, hap } from './helpers/accessory.js';
 
 const relay = (id: number, on = false): ShellyComponent => ({ key: `relay:${id}`, type: 'switch', id, state: { on } });
 const temperature: ShellyComponent = { key: 'sensor:temperature', type: 'sensor', id: 0, sensorKind: 'temperature', state: { value: 21.5, unit: 'celsius' } };
@@ -56,5 +56,85 @@ describe('stale service pruning', () => {
     accessory.addService(hap.Service.Switch, 'Input', 'input:0');
     track(createAccessory({ accessory, components: [{ key: 'input:0', type: 'input', id: 0, state: { active: false } }] }));
     expect(nonInfo(accessory)).toEqual([]);
+  });
+});
+
+describe('offline reporting', () => {
+  const COMM_FAILURE = hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE;
+
+  async function poll(times = 1) {
+    for (let i = 0; i < times; i++) await vi.advanceTimersByTimeAsync(5000);
+  }
+
+  function setup(options: { offlineAfterFailures?: number } = {}) {
+    const created = track(createAccessory({ components: [relay(0, true), temperature], options }));
+    const sw = created.accessory.getServiceById(hap.Service.Switch, 'relay:0')!;
+    const temp = created.accessory.getServiceById(hap.Service.TemperatureSensor, 'sensor:temperature')!;
+    return { ...created, sw, temp };
+  }
+
+  it('keeps serving state while failures stay below the threshold', async () => {
+    const { client, sw } = setup();
+    client.discoverComponents.mockRejectedValue(new Error('ETIMEDOUT'));
+    await poll(2);
+    await expect(sw.getCharacteristic(hap.Characteristic.On).handleGetRequest()).resolves.toBe(true);
+  });
+
+  it('throws SERVICE_COMMUNICATION_FAILURE and sets StatusFault after N consecutive failures', async () => {
+    const { client, sw, temp } = setup();
+    client.discoverComponents.mockRejectedValue(new Error('ETIMEDOUT'));
+    await poll(3);
+    await expect(sw.getCharacteristic(hap.Characteristic.On).handleGetRequest()).rejects.toBe(COMM_FAILURE);
+    await expect(temp.getCharacteristic(hap.Characteristic.CurrentTemperature).handleGetRequest()).rejects.toBe(COMM_FAILURE);
+    expect(temp.getCharacteristic(hap.Characteristic.StatusFault).value).toBe(hap.Characteristic.StatusFault.GENERAL_FAULT);
+    await expect(temp.getCharacteristic(hap.Characteristic.StatusFault).handleGetRequest()).resolves.toBe(hap.Characteristic.StatusFault.GENERAL_FAULT);
+    // Switch does not declare StatusFault, so none is added to it.
+    expect(sw.testCharacteristic(hap.Characteristic.StatusFault)).toBe(false);
+  });
+
+  it('logs one info line on offline and one on recovery, not per poll', async () => {
+    const { client, platform, sw, temp } = setup();
+    client.discoverComponents.mockRejectedValue(new Error('ETIMEDOUT'));
+    await poll(6);
+    expect(platform.log.info.mock.calls.filter(([m]) => String(m).includes('not responding'))).toHaveLength(1);
+    client.discoverComponents.mockResolvedValue([relay(0, false), temperature]);
+    await poll(3);
+    expect(platform.log.info.mock.calls.filter(([m]) => String(m).includes('responding again'))).toHaveLength(1);
+    await expect(sw.getCharacteristic(hap.Characteristic.On).handleGetRequest()).resolves.toBe(false);
+    expect(temp.getCharacteristic(hap.Characteristic.StatusFault).value).toBe(hap.Characteristic.StatusFault.NO_FAULT);
+  });
+
+  it('resets the failure count after a successful poll', async () => {
+    const { client, sw } = setup();
+    client.discoverComponents.mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce(new Error('x'));
+    await poll(3); // fail, fail, succeed
+    client.discoverComponents.mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce(new Error('x'));
+    await poll(2);
+    await expect(sw.getCharacteristic(hap.Characteristic.On).handleGetRequest()).resolves.toBe(true);
+  });
+
+  it('never reports offline when offlineAfterFailures is 0', async () => {
+    const { client, platform, sw } = setup({ offlineAfterFailures: 0 });
+    client.discoverComponents.mockRejectedValue(new Error('ETIMEDOUT'));
+    await poll(10);
+    await expect(sw.getCharacteristic(hap.Characteristic.On).handleGetRequest()).resolves.toBe(true);
+    expect(platform.log.info).not.toHaveBeenCalledWith(expect.stringContaining('not responding'));
+  });
+
+  it('recovers on a realtime update', async () => {
+    let push: ((u: { componentKey: string; state: unknown }) => void) | undefined;
+    const platform = fakePlatform({ realtime: true });
+    const client = Object.assign(fakeClient([relay(0, true)]), {
+      subscribe: vi.fn(async (handler: typeof push) => { push = handler; return () => {}; }),
+    });
+    const { accessory } = track(createAccessory({ components: [relay(0, true)], platform, client, device: { generation: 2 } }));
+    await vi.advanceTimersByTimeAsync(0);
+    client.discoverComponents.mockRejectedValue(new Error('ETIMEDOUT'));
+    await poll(3);
+    const on = accessory.getServiceById(hap.Service.Switch, 'relay:0')!.getCharacteristic(hap.Characteristic.On);
+    await expect(on.handleGetRequest()).rejects.toBe(COMM_FAILURE);
+    push!({ componentKey: 'relay:0', state: { on: false } });
+    await expect(on.handleGetRequest()).resolves.toBe(false);
+    expect(platform.log.info).toHaveBeenCalledWith(expect.stringContaining('responding again'));
   });
 });

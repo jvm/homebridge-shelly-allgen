@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Offline reporting. After `offlineAfterFailures` consecutive failed polls (default 3), reads fail with `SERVICE_COMMUNICATION_FAILURE` so Apple Home shows "No Response", and sensor services set `StatusFault`. The next successful poll or realtime update clears it. One info line is logged when a device goes offline and one when it recovers. `0` disables it; `devices[].offlineAfterFailures` overrides it per device (use `0` for sleeping battery sensors).
+
 ### Fixed
 - Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.
 
