@@ -143,17 +143,20 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     const restored = accessory !== undefined;
     if (!accessory) {
       accessory = new this.api.platformAccessory(displayName, uuid);
-      accessory.context.device = device;
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       this.accessories.set(uuid, accessory);
-      this.log.info('Added Shelly accessory:', displayName, `(${device.host})`);
-    } else {
-      accessory.context.device = device;
-      this.log.info('Restored Shelly accessory:', displayName, `(${device.host})`);
     }
+    accessory.context.device = device;
     this.handlers.get(uuid)?.close();
     this.handlers.set(uuid, new ShellyDeviceAccessory(this, accessory, client, device, this.accessoryOptions(endpoint), component ? new Set([component.key]) : undefined));
-    // Persist after the handler has pruned stale services from the cached accessory.
-    if (restored) this.api.updatePlatformAccessories([accessory]);
+    // Register or persist only after the handler has configured (and, for a
+    // cached accessory, pruned) its services. Registering first wrote new
+    // accessories to cachedAccessories with only AccessoryInformation.
+    if (restored) {
+      this.api.updatePlatformAccessories([accessory]);
+      this.log.info('Restored Shelly accessory:', displayName, `(${device.host})`);
+    } else {
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      this.log.info('Added Shelly accessory:', displayName, `(${device.host})`);
+    }
   }
 }

@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.
 - Shelly Gas no longer raises a false gas alarm during warm-up or on a sensor fault. Detection is derived from `alarm_state` alone (`mild` / `heavy`); a `sensor_state` other than `normal` (warmup, fault, unknown) or a failed `self_test_state` is reported as `StatusFault` instead.
+- New accessories are registered with Homebridge only after their services are configured. Before, a slow device could be written to `cachedAccessories` with only AccessoryInformation until the next restart.
 
 ## [0.2.0] — 2026-05-14
 
