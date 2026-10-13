@@ -139,6 +139,7 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
     this.discovered.add(uuid);
     const displayName = component?.name ?? endpoint.name ?? device.name ?? device.model;
     let accessory = this.accessories.get(uuid);
+    const restored = accessory !== undefined;
     if (!accessory) {
       accessory = new this.api.platformAccessory(displayName, uuid);
       accessory.context.device = device;
@@ -147,10 +148,11 @@ export class ShellyAllGenPlatform implements DynamicPlatformPlugin {
       this.log.info('Added Shelly accessory:', displayName, `(${device.host})`);
     } else {
       accessory.context.device = device;
-      this.api.updatePlatformAccessories([accessory]);
       this.log.info('Restored Shelly accessory:', displayName, `(${device.host})`);
     }
     this.handlers.get(uuid)?.close();
     this.handlers.set(uuid, new ShellyDeviceAccessory(this, accessory, client, device, component ? new Set([component.key]) : undefined));
+    // Persist after the handler has pruned stale services from the cached accessory.
+    if (restored) this.api.updatePlatformAccessories([accessory]);
   }
 }

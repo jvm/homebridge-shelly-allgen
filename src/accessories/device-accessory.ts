@@ -33,6 +33,7 @@ export class ShellyDeviceAccessory {
   ) {
     this.updateInfo();
     this.configureServices(device.components);
+    this.pruneStaleServices();
     this.startPolling();
     void this.startRealtime();
   }
@@ -55,6 +56,21 @@ export class ShellyDeviceAccessory {
       else if (c.type === 'cover') this.configureCover(c);
       else if (c.type === 'meter') this.configureMeter(c);
       else if (c.type === 'sensor') this.configureSensor(c);
+    }
+  }
+
+  /**
+   * Remove cached services that no current component claimed. `getService()`
+   * only ever adds, so a component dropped by a filter or a model change — or
+   * a component whose service type changed on the same subtype — would
+   * otherwise leave a dead service in the cached accessory.
+   */
+  private pruneStaleServices() {
+    const current = new Set(this.services.values());
+    for (const svc of [...this.accessory.services]) {
+      if (svc.UUID === this.platform.Service.AccessoryInformation.UUID || current.has(svc)) continue;
+      this.platform.log.info(`Removing stale service ${svc.displayName}${svc.subtype ? ` (${svc.subtype})` : ''} from ${this.accessory.displayName}`);
+      this.accessory.removeService(svc);
     }
   }
 

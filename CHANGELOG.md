@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- Cached accessories no longer keep dead services. After an accessory is configured, every cached service (except AccessoryInformation) that no current component claims is removed — for example after an `exclude` filter hides a component, a device changes model or mode, or a component's service type changes.
+
 ## [0.2.0] — 2026-05-14
 
 ### Added
